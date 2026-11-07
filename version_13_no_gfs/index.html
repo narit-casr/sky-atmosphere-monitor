@@ -1,0 +1,2517 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sky &amp; Atmosphere Monitor (research prototype)</title>
+<!-- Kept out of search engines until NARIT approves the public site. To make it findable, delete this line. -->
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root {
+    --bg: #E8ECEF;
+    --panel: #F7F9FA;
+    --ink: #1C2830;
+    --muted: #5E6D78;
+    --line: #CDD5DB;
+    --accent: #2D5B7A;
+    --focus: #2D5B7A;
+    --fc: #7B4FA8;
+    --font: 'IBM Plex Sans Thai', 'Noto Sans Thai', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141D24;
+      --panel: #1A252E;
+      --ink: #E3E9ED;
+      --muted: #95A4AF;
+      --line: #2C3A45;
+      --accent: #8FB9D7;
+      --focus: #8FB9D7;
+      --fc: #C29BEA;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: var(--font);
+    font-size: 15px;
+    line-height: 1.5;
+    background: var(--bg);
+    color: var(--ink);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 410px;
+  }
+  #mapwrap { position: relative; height: 100%; min-width: 0; }
+  #map { height: 100%; background: var(--bg); }
+  body.panel-hidden { grid-template-columns: minmax(0, 1fr) 0; }
+  body.panel-hidden aside { display: none; }
+
+  /* Floating map controls (Windy-style) */
+  .ovl {
+    position: absolute; z-index: 1000;
+    background: color-mix(in srgb, var(--panel) 93%, transparent);
+    border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, .18);
+    color: var(--ink);
+  }
+  #layerBox { top: 12px; right: 12px; width: 200px; max-height: calc(100% - 150px); overflow-y: auto; padding: 4px; }
+  #layerHead {
+    width: 100%; font: inherit; font-weight: 600; font-size: 0.9rem; text-align: left; cursor: pointer;
+    background: transparent; border: 0; color: var(--ink); padding: 6px 8px;
+  }
+  #layerHead::after { content: " ▾"; color: var(--muted); }
+  #layerHead[aria-expanded="false"]::after { content: " ▸"; }
+  #layerHead[aria-expanded="false"] + #layerList { display: none; }
+  .lyr-group { font-size: 0.72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 8px 8px 2px; }
+  .lyr {
+    display: block; width: 100%; font: inherit; font-size: 0.86rem; text-align: left; cursor: pointer;
+    padding: 5px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--ink);
+  }
+  .lyr:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  .lyr[aria-pressed="true"] { background: var(--accent); color: var(--panel); font-weight: 600; }
+  .lyr.ov::before { content: "☐ "; }
+  .lyr.ov[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--ink); }
+  .lyr.ov[aria-pressed="true"]::before { content: "☑ "; }
+  #panelBtn {
+    top: 12px; right: 222px; width: 36px; height: 36px; font-size: 1.1rem; cursor: pointer; padding: 0;
+  }
+  #legendBox { left: 12px; bottom: 98px; width: min(340px, calc(100% - 24px)); padding: 8px 12px 6px; }
+  #legendBox .bar { height: 10px; border-radius: 3px; border: 1px solid var(--line); }
+  #legendBox .ticks { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
+  #timeBar { left: 12px; right: 12px; bottom: 14px; display: flex; gap: 12px; align-items: center; padding: 8px 14px 6px; }
+  #playBtn {
+    flex: none; width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer;
+    background: var(--accent); color: var(--panel); font-size: 1rem;
+  }
+  .tbmain { flex: 1; min-width: 0; }
+  .tbtop { display: flex; justify-content: space-between; gap: 12px; font-size: 0.9rem; flex-wrap: wrap; }
+  #tbSub { font-size: 0.78rem; }
+  #fcSlider { width: 100%; margin: 4px 0 0; accent-color: var(--fc); }
+  #tbDays { position: relative; height: 16px; font-size: 0.72rem; color: var(--muted); }
+  #tbDays span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+  #tbDays span::before { content: ""; position: absolute; left: 50%; top: -6px; height: 5px; border-left: 1px solid var(--line); }
+  .pt-pop { font-family: var(--font); font-size: 12px; min-width: 230px; }
+  .pt-pop .big { font-size: 1.15rem; font-weight: 600; }
+  .pt-pop svg { display: block; margin-top: 4px; }
+  aside {
+    height: 100%;
+    overflow-y: auto;
+    background: var(--panel);
+    border-left: 1px solid var(--line);
+    padding: 22px 24px 32px;
+  }
+  @media (max-width: 860px) {
+    html, body { height: auto; }
+    body { grid-template-columns: 1fr; }
+    #mapwrap { height: 72vh; }
+    #layerBox { width: 160px; max-height: calc(100% - 150px); }
+    #panelBtn { display: none; }
+    #legendBox { bottom: 104px; }
+    aside { height: auto; border-left: 0; border-top: 1px solid var(--line); }
+  }
+
+  h1 { font-size: 1.35rem; font-weight: 600; line-height: 1.25; margin: 0 0 4px; }
+  h2 { font-size: 1rem; font-weight: 600; margin: 0 0 6px; }
+  h1 .badge {
+    display: inline-block; vertical-align: middle; margin-left: 6px; padding: 1px 8px;
+    font-size: 0.7rem; font-weight: 500; letter-spacing: 0.02em; color: var(--muted);
+    border: 1px solid var(--line); border-radius: 999px; white-space: nowrap;
+  }
+  .disclaimer { margin-top: 6px; }
+  .disclaimer a { color: inherit; }
+  p { margin: 0; }
+  .muted { color: var(--muted); }
+  .small { font-size: 0.85rem; }
+  section { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line); }
+  section.first { margin-top: 14px; padding-top: 0; border-top: 0; }
+  .statusbadge {
+    font: inherit; font-size: 0.8rem; margin-top: 6px; padding: 3px 10px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  }
+  .sdot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
+  .sdot.ok { background: #2E9E4F; } .sdot.late { background: #E6A100; } .sdot.stale { background: #D93A3A; } .sdot.none { background: #9AA5AD; }
+  table.status { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 6px; }
+  table.status td { padding: 4px 0; border-top: 1px solid var(--line); vertical-align: top; }
+  table.status td.age { text-align: right; white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
+  footer.about { margin-top: 26px; padding-top: 14px; border-top: 1px solid var(--line); display: grid; gap: 6px; }
+
+  .controls { margin-top: 18px; display: grid; gap: 12px; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button {
+    flex: 1; font: inherit; font-size: 0.9rem; padding: 7px 6px; border: 0; cursor: pointer;
+    background: transparent; color: var(--ink);
+  }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--panel); font-weight: 500; }
+  .row { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  select {
+    font: inherit; font-size: 0.9rem; padding: 5px 8px; margin-left: 6px;
+    border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink);
+  }
+  .check { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .summary { margin-top: 18px; font-size: 1.05rem; line-height: 1.55; }
+  .summary strong { font-weight: 600; }
+
+  .legend { margin-top: 14px; display: grid; gap: 4px; font-size: 0.8rem; color: var(--muted); }
+  .legend .items { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  .legend span.sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; border: 1px solid rgba(0,0,0,.35); }
+
+  .chartbox { position: relative; height: 230px; margin-top: 10px; }
+  .zoomhint { margin-top: 4px; }
+  .chartlegend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; font-size: 0.8rem; color: var(--muted); }
+  .chartlegend span { display: inline-flex; align-items: center; gap: 6px; }
+  .chartlegend svg { flex: none; }
+  #zoomReset { margin-left: 6px; font: inherit; padding: 1px 8px; border-radius: 4px; border: 1px solid var(--line); background: transparent; color: inherit; cursor: pointer; }
+
+  ol.stations { list-style: none; padding: 0; margin: 10px 0 0; }
+  ol.stations li + li { border-top: 1px solid var(--line); }
+  .stnrow {
+    width: 100%; display: grid; grid-template-columns: 52px 1fr; gap: 12px; align-items: center;
+    font: inherit; text-align: left; padding: 7px 4px; background: transparent; border: 0; color: var(--ink); cursor: pointer;
+  }
+  .stnrow:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  .stnrow[aria-current="true"] { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+  .stnrow .nm { font-size: 0.9rem; line-height: 1.3; }
+  .stnrow .nm small { display: block; color: var(--muted); font-size: 0.78rem; }
+  .stnrow .nm .dist { font-variant-numeric: tabular-nums; }
+  .locrow { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 6px 0 4px; }
+  .locbtn {
+    font: inherit; font-size: 0.85rem; padding: 5px 10px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  }
+  .locbtn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  .me-dot { width: 14px; height: 14px; border-radius: 50%; background: #1A73E8; border: 2.5px solid #fff;
+            box-shadow: 0 0 0 1px rgba(0,0,0,.35), 0 0 8px rgba(26,115,232,.6); }
+  .pill {
+    display: block; text-align: center; font-weight: 600; font-size: 0.9rem; border-radius: 6px; padding: 3px 0;
+    font-variant-numeric: tabular-nums; border: 1px solid rgba(0,0,0,.2);
+  }
+  .pill.none { background: transparent; color: var(--muted); border-style: dashed; border-color: var(--line); font-weight: 400; }
+
+  dl.outlook { display: grid; grid-template-columns: 1fr auto; gap: 6px 14px; margin: 10px 0 12px; font-size: 0.9rem; }
+  dl.outlook dt { color: var(--muted); }
+  dl.outlook dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .note { margin-top: 8px; }
+
+  /* Map markers */
+  .stn-wrap { background: none; border: 0; }
+  .stn {
+    width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+    font: 600 11px/1 var(--font); font-variant-numeric: tabular-nums;
+    border: 1.5px solid rgba(0,0,0,.5); box-shadow: 0 1px 3px rgba(0,0,0,.3);
+  }
+  .stn.none { width: 12px; height: 12px; background: #9AA5AD; border: 1.5px solid #fff; box-shadow: none; }
+  .stn.sel { outline: 3px solid var(--ink); outline-offset: 2px; }
+  .leaflet-tooltip { font-family: var(--font); font-size: 12px; }
+  .leaflet-container { font-family: var(--font); }
+  .fc { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+  .fc input[type="range"] { width: 100%; accent-color: var(--fc); }
+  .fc .when { font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+  .fc-img { image-rendering: auto; }
+  #fcBar .bar { height: 10px; border-radius: 3px; border: 1px solid var(--line); }
+  #fcBar .ticks { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .leaflet-tile-pane { filter: grayscale(0.85) brightness(1.04) contrast(0.92); }
+  @media (prefers-color-scheme: dark) {
+    .leaflet-tile-pane { filter: grayscale(1) invert(1) brightness(0.85) contrast(0.85); }
+  }
+</style>
+</head>
+<body>
+<div id="mapwrap">
+  <div id="map" role="region" aria-label="Map of observations and forecasts"></div>
+
+  <!-- Windy-style overlays -->
+  <div class="ovl" id="layerBox">
+    <button type="button" id="layerHead" aria-expanded="true" aria-controls="layerList">Layers</button>
+    <div id="layerList"></div>
+  </div>
+  <button type="button" class="ovl" id="panelBtn" aria-label="Hide side panel" title="Hide side panel" aria-pressed="false">&#x27E9;</button>
+  <div class="ovl" id="legendBox" hidden><div id="fcBar"></div></div>
+  <div class="ovl" id="timeBar" hidden>
+    <button type="button" id="playBtn" aria-label="Play the forecast" title="Play">&#x25B6;</button>
+    <div class="tbmain">
+      <div class="tbtop"><strong id="tbTime"></strong><span id="tbSub" class="muted"></span></div>
+      <input type="range" id="fcSlider" min="0" max="0" value="0" step="1" aria-label="Forecast time">
+      <div id="tbDays" aria-hidden="true"></div>
+    </div>
+  </div>
+</div>
+
+<aside>
+  <header>
+    <h1>Sky &amp; Atmosphere Monitor <span class="badge">Research prototype</span></h1>
+    <p class="muted small" id="updated">Loading data…</p>
+    <button type="button" id="statusBadge" class="statusbadge" hidden></button>
+  </header>
+
+  <section id="detail" class="first" hidden>
+    <h2 id="detailTitle"></h2>
+    <p class="muted small" id="detailSub"></p>
+    <div class="chartbox"><canvas id="chart" role="img" aria-label="Hourly values for the selected station"></canvas></div>
+    <div id="chartLegend" class="chartlegend" hidden></div>
+    <p class="muted small zoomhint">Drag across the chart to zoom in (pinch on a phone); Shift + drag to pan; double-click to reset.
+      <button type="button" id="zoomReset" hidden>Reset zoom</button></p>
+  </section>
+
+  <div class="controls">
+    <div class="seg" role="group" aria-label="Area">
+      <button type="button" data-area="cm" aria-pressed="true">Chiang Mai</button>
+      <button type="button" data-area="north" aria-pressed="false">Upper north</button>
+      <button type="button" data-area="th" aria-pressed="false">Thailand</button>
+    </div>
+    <div class="row">
+      <label>Show<select id="poll"></select></label>
+      <label class="check"><input type="checkbox" id="showFire" checked> Fire hotspots</label>
+      <label class="check"><input type="checkbox" id="hideObs"> Hide observations</label>
+      <label class="check" id="aqiToggle" hidden><input type="checkbox" id="useAqi"> Thai AQI colours</label>
+    </div>
+    <div class="fc" id="fcControls" hidden>
+      <label class="check"><input type="checkbox" id="useCor" checked> Corrected forecast with recent observations</label>
+      <label class="check"><input type="checkbox" id="showFc" checked> <span id="showFcText">Show forecast on the map</span></label>
+      <label class="check"><input type="checkbox" id="useWaccm" checked> Fill outside the WRF-Chem domain with WACCM (global model, about 100 km)</label>
+      <p class="when" id="fcLabel"></p>
+      <p class="muted small" id="fcCursor"></p>
+    </div>
+  </div>
+
+  <p class="summary" id="summary" aria-live="polite"></p>
+  <p class="summary" id="fcSummary"></p>
+  <div class="legend" id="legend"></div>
+
+  <section>
+    <h2>Stations</h2>
+    <div class="locrow">
+      <button type="button" id="locBtn" class="locbtn">Use my location</button>
+      <label id="sortWrap" hidden>Sort<select id="sortBy"><option value="value">highest value</option><option value="dist">nearest to me</option></select></label>
+    </div>
+    <p class="muted small" id="locNote">The page asks for your location when it opens. It is used only in this browser, to show where you are and how far each station is, and is not sent or stored anywhere.</p>
+    <p class="muted small" id="listNote">Latest hourly value, highest first. Select a station to see its recent history.</p>
+    <ol class="stations" id="stationList"></ol>
+  </section>
+
+  <section>
+    <h2>Season outlook</h2>
+    <div id="outlook"></div>
+  </section>
+
+  <section id="statusSec">
+    <h2>Data status</h2>
+    <p class="muted small">How old the newest data from each source is. Amber: later than usual; red: the feed has probably stopped.</p>
+    <table class="status" id="statusTable"></table>
+  </section>
+
+  <footer class="about">
+    <p class="muted small">Air quality from the Pollution Control Department (PCD) Air4Thai network, weather observations and the radar rainfall composite from the Thai Meteorological Department (TMD), weather observations from NARIT's observatory weather stations, fire hotspots from NASA FIRMS and forecasts from NARIT's WRF-Chem model, with NCAR's WACCM global chemistry forecast filling the map outside the WRF-Chem domain. Satellite images from the Japan Meteorological Agency's Himawari-9, provided through NASA's <a href="https://nasa-gibs.github.io/gibs-api-docs/" target="_blank" rel="noopener">Global Imagery Browse Services (GIBS)</a>, part of NASA's Earth Science Data and Information System (ESDIS).</p>
+    <p class="muted small disclaimer">Research prototype developed at the Center for Atmospheric Science Research. Not an official NARIT service. For official air quality and weather information, see <a href="https://air4thai.pcd.go.th" target="_blank" rel="noopener">Air4Thai (PCD)</a> and the <a href="https://www.tmd.go.th" target="_blank" rel="noopener">Thai Meteorological Department</a>.</p>
+  </footer>
+</aside>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
+<script>
+const DATA_URL = 'dashboard_data/dashboard.json';
+const REFRESH_MIN = 10;
+
+// Province = last comma-separated part of areaEN, lower case, letters only,
+// so "Chiangmai", "Chiang Mai" and "Mae Hongson" all match.
+const norm = s => String(s || '').toLowerCase().replace(/[^a-z]/g, '');
+const province = a => norm(String(a || '').split(',').pop());
+const NORTH = ['chiangmai', 'chiangrai', 'maehongson', 'lampang', 'lamphun', 'phayao', 'nan', 'phrae', 'tak'];
+const AREAS = {
+  cm:    { label: 'Chiang Mai',  bounds: [[17.1, 97.9], [20.3, 99.7]],
+           match: a => province(a) === 'chiangmai' || norm(a).endsWith('chiangmai') },
+  north: { label: 'Upper north', bounds: [[15.6, 97.3], [20.5, 101.4]],
+           match: a => NORTH.includes(province(a)) },
+  th:    { label: 'Thailand',    bounds: [[5.5, 97.2], [20.6, 105.8]], match: () => true }
+};
+
+// Thai AQI breakpoints (upper edge of each of the first four bands)
+const POLL = {
+  PM25: { label: 'PM2.5', unit: 'µg/m³', bands: [15, 25, 37.5, 75], std: 37.5 },
+  PM10: { label: 'PM10',  unit: 'µg/m³', bands: [50, 80, 120, 180], std: 120 },
+  O3:   { label: 'O₃',    unit: 'ppb',   bands: [35, 50, 70, 120] },
+  CO:   { label: 'CO',    unit: 'ppm',   bands: [4.4, 6.4, 9, 30], dec: 1 },
+  NO2:  { label: 'NO₂',   unit: 'ppb',   bands: [60, 106, 170, 340] },
+  SO2:  { label: 'SO₂',   unit: 'ppb',   bands: [100, 200, 300, 400] },
+  // Weather (TMD stations + WRF-Chem forecast); continuous colour scales, no AQI bands
+  TEMP: { label: 'Temperature',       unit: '°C',   met: true, dec: 1, zero: false },
+  RH:   { label: 'Relative humidity', unit: '%',    met: true },
+  WIND: { label: 'Wind speed',        unit: 'm/s',  met: true, dec: 1 },
+  RAIN: { label: 'Rain',              unit: 'mm/h', met: true, dec: 1, bar: true }
+};
+const MET_VARS = ['TEMP', 'RH', 'WIND', 'RAIN'];
+// Astronomy: NARIT observatory weather stations + WRF-Chem forecast at each observatory.
+// fcOnly variables have no instrument at the sites; markers show the forecast for the current hour.
+Object.assign(POLL, {
+  ACLOUD: { label: 'Cloud cover',               unit: '%',   astro: true, fcOnly: true },
+  ADPS:   { label: 'Dew-point spread',          unit: '°C',  astro: true, dec: 1 },
+  ARH:    { label: 'Humidity',                  unit: '%',   astro: true },
+  AWIND:  { label: 'Wind speed',                unit: 'm/s', astro: true, dec: 1 },
+  ATEMP:  { label: 'Temperature',               unit: '°C',  astro: true, dec: 1, zero: false },
+  APWV:   { label: 'Precipitable water vapour', unit: 'mm',  astro: true, dec: 1, fcOnly: true },
+  // DIMM observations at TNO only; the other sites show the forecast (fcFill)
+  ASEEING: { label: 'Seeing',                   unit: '″',   astro: true, dec: 2, fcFill: true }
+});
+const ASTRO_VARS = ['ACLOUD', 'ASEEING', 'ADPS', 'ARH', 'AWIND', 'ATEMP', 'APWV'];
+const isMet = p => !!(POLL[p] && POLL[p].met);
+const isAstro = p => !!(POLL[p] && POLL[p].astro);
+// PBL height: LiDAR retrieval at AstroPark (Macatangay et al., AMT 2025) + WRF-Chem PBLH
+POLL.PBLH = { label: 'PBL height', unit: 'm', lidar: true, fcFill: true };
+const isLidar = p => !!(POLL[p] && POLL[p].lidar);
+// Health categories (0 low, 1 moderate, 2 high), computed by extractWRFForecast.m (health.json,
+// forecast_grid_H*.json) after wrf_Surface_Heat / AQI / HeatAQI.ncl
+Object.assign(POLL, {
+  HTEMP: { label: 'Heat (temperature)',            unit: '', health: true,
+           basis: 'From temperature: below 30 °C low, 30 to 35 °C moderate, above 35 °C high.' },
+  HHI:   { label: 'Heat index',                    unit: '', health: true,
+           basis: 'From the heat index (temperature and humidity, NOAA): below 32 °C low, 32 to 41 °C moderate (extreme caution), above 41 °C high (danger).' },
+  HPM:   { label: 'Air pollution (PM2.5)',         unit: '', health: true,
+           basis: 'From PM2.5: below 50 µg/m³ low, 50 to 100 µg/m³ moderate, above 100 µg/m³ high.' },
+  HTPM:  { label: 'Combined: temperature + PM2.5', unit: '', health: true, combined: true,
+           basis: 'The worse of the temperature and PM2.5 risks; temperature from the nearest TMD station within 30 km.' },
+  HHIPM: { label: 'Combined: heat index + PM2.5',  unit: '', health: true, combined: true,
+           basis: 'The worse of the heat-index and PM2.5 risks; temperature and humidity from the nearest TMD station within 30 km.' }
+});
+const HEALTH_VARS = ['HTEMP', 'HHI', 'HPM', 'HTPM', 'HHIPM'];
+const isHealth = p => !!(POLL[p] && POLL[p].health);
+const HCAT = [
+  { name: 'Low',      short: 'L', c: '#2E9E4F', ink: '#FFFFFF' },
+  { name: 'Moderate', short: 'M', c: '#FFE500', ink: '#332E00' },
+  { name: 'High',     short: 'H', c: '#E53935', ink: '#FFFFFF' }
+];
+const HCAT_RGB = HCAT.map(c => [1, 3, 5].map(i => parseInt(c.c.slice(i, i + 2), 16)));
+const hcat = v => HCAT[Math.max(0, Math.min(2, Math.round(v)))];
+const isCont = p => isMet(p) || isAstro(p) || isLidar(p) || isHealth(p);   // not AQI bands
+const CAT = [
+  { name: 'Very good',                 c: '#3BCCFF', ink: '#0A2531' },
+  { name: 'Good',                      c: '#92D050', ink: '#17300A' },
+  { name: 'Moderate',                  c: '#FFE500', ink: '#332E00' },
+  { name: 'Starting to affect health', c: '#FFA200', ink: '#331F00' },
+  { name: 'Affects health',            c: '#F04646', ink: '#FFFFFF' }
+];
+const FIRE = [
+  { maxH: 6,        c: '#FF3B1F', name: 'under 6 h' },
+  { maxH: 24,       c: '#FF8F2E', name: '6 to 24 h' },
+  { maxH: Infinity, c: '#B89A7E', name: 'older' }
+];
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+const $ = s => document.querySelector(s);
+const arr = x => Array.isArray(x) ? x : (x == null || x === '' ? [] : [x]);
+const isNum = v => typeof v === 'number' && isFinite(v);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Times: "yyyy-MM-dd HH:mm[:ss]". Station times are Bangkok local, FIRMS times are UTC.
+function parseTime(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(s || '');
+  return m ? new Date(Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5])) : null;
+}
+const pad = n => String(n).padStart(2, '0');
+const fmtTime = d => d ? `${d.getUTCDate()} ${MON[d.getUTCMonth()]} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}` : '';
+const utcToLocal = d => new Date(d.getTime() + 7 * 3600e3);
+
+function catIdx(p, v) {
+  const b = POLL[p].bands;
+  for (let i = 0; i < b.length; i++) if (v <= b[i]) return i;
+  return 4;
+}
+function fmtVal(p, v) {
+  if (isHealth(p)) return hcat(v).name;
+  return POLL[p] && POLL[p].dec ? v.toFixed(POLL[p].dec) : String(Math.round(v));
+}
+
+let D = null, seriesById = {}, map, stnLayer, fireLayer, tileLayer, chart;
+let FC = null, FG = null, fcById = {}, fcOverlay = null, fcFrameCache = {};
+const FGs = {};   // pollutant -> forecast grid (loaded when first needed)
+let COR = null, corById = {}, corFieldCache = {};
+let MET = null, metSeriesById = {}, FM = null, FMById = {};
+let HLT = null, hltSeriesById = {}, FH = null, FHById = {};   // health categories (health.json)
+let AST = null, astSeriesById = {}, FA = null, FAById = {};
+const AST_URL = 'dashboard_data/astro_obs.json', FA_URL = 'dashboard_data/forecast_astro.json';
+// Observations / forecast / series lookups for the selected variable's source
+let LID = null, lidSeriesById = {}, FL = null, FLById = {};
+const LID_URL = 'dashboard_data/lidar_obs.json', FL_URL = 'dashboard_data/forecast_lidar.json';
+const srcObs = p => isHealth(p) ? HLT : isLidar(p) ? LID : isAstro(p) ? AST : isMet(p) ? MET : D;
+const srcFc  = p => isHealth(p) ? FH : isLidar(p) ? FL : isAstro(p) ? FA : isMet(p) ? FM : FC;
+const srcFcById  = p => isHealth(p) ? FHById : isLidar(p) ? FLById : isAstro(p) ? FAById : isMet(p) ? FMById : fcById;
+const srcSeries  = p => isHealth(p) ? hltSeriesById : isLidar(p) ? lidSeriesById : isAstro(p) ? astSeriesById : isMet(p) ? metSeriesById : seriesById;
+// Health stations that carry a given category (TMD stations for heat, PCD stations for the rest)
+const healthStations = p => HLT ? HLT.stations.filter(s => hltSeriesById[s.id] && hltSeriesById[s.id][p]) : [];
+const MET_URL = 'dashboard_data/met_obs.json', FM_URL = 'dashboard_data/forecast_met.json';
+const COR_URL = 'dashboard_data/forecast_correction.json';
+const state = { area: 'cm', poll: 'PM25', sel: null, fire: true, first: true, fcOn: true, frame: null, cor: true,
+                hideObs: false, me: null, sort: 'value',     // me = {lat, lon, acc} once the user shares location
+                // overlays on top of the main layer, and the shared timeline
+                ovSat: null, ovRadar: false, satTimes: [], satIdx: -1, radIdx: -1,
+                timeline: [], tIdx: 0, tlReset: true, waccm: true };
+let WGs = {}, WG = null, waccmOverlay = null, waccmCache = {};    // WACCM fields (forecast_waccm_<VAR>.json)
+let meLayer = null;
+const FC_URL = 'dashboard_data/forecast_stations.json';
+// Astronomy humidity, wind and temperature share the weather layers (same model fields)
+const GRID_ALIAS = { ARH: 'RH', AWIND: 'WIND', ATEMP: 'TEMP' };
+const gridUrl = p => `dashboard_data/forecast_grid_${GRID_ALIAS[p] || p}.json`;
+const WACCM_VARS = ['PM25', 'O3', 'CO', 'NO2', 'SO2', 'TEMP', 'RH', 'WIND', 'PBLH'];   // written by extractWRFForecast.m
+const nowLocalMs = () => Date.now() + 7 * 3600e3;   // "local time as UTC" convention used by parseTime
+
+// ---------- map ----------
+const darkMQ = window.matchMedia('(prefers-color-scheme: dark)');
+function setTiles() {
+  // Dark mode is handled by a CSS filter on the tile pane, so one tile source is enough.
+  if (tileLayer) return;
+  tileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 18
+  }).addTo(map);
+}
+function initMap() {
+  map = L.map('map', { preferCanvas: true }).fitBounds(AREAS.cm.bounds);
+  setTiles();
+  map.createPane('sat');
+  map.getPane('sat').style.zIndex = 340;
+  map.getPane('sat').style.pointerEvents = 'none';
+  map.createPane('waccm');
+  map.getPane('waccm').style.zIndex = 345;               // under the WRF-Chem field
+  map.getPane('waccm').style.pointerEvents = 'none';
+  map.createPane('fcst');
+  map.getPane('fcst').style.zIndex = 350;
+  map.createPane('radar');
+  map.getPane('radar').style.zIndex = 360;
+  map.getPane('radar').style.pointerEvents = 'none';
+  map.getPane('fcst').style.pointerEvents = 'none';
+  fireLayer = L.layerGroup().addTo(map);
+  stnLayer = L.layerGroup().addTo(map);
+  if (darkMQ.addEventListener) darkMQ.addEventListener('change', () => { setTiles(); if (D && state.sel) renderChart(); });
+}
+
+function curStations() {
+  const p = state.poll;
+  if (isHealth(p)) return healthStations(p);
+  if (isLidar(p)) return LID ? arr(LID.stations) : [];
+  if (isAstro(p)) return AST ? arr(AST.stations) : [];
+  return isMet(p) ? (MET ? arr(MET.stations) : []) : D.stations;
+}
+// Distance on the Earth's surface (km)
+function distKm(lat1, lon1, lat2, lon2) {
+  const r = Math.PI / 180, a = Math.sin((lat2 - lat1) * r / 2) ** 2 +
+    Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin((lon2 - lon1) * r / 2) ** 2;
+  return 12742 * Math.asin(Math.sqrt(a));
+}
+const stationDist = s => (state.me && isNum(s.lat) && isNum(s.lon)) ? distKm(state.me.lat, state.me.lon, s.lat, s.lon) : null;
+const fmtDist = d => d < 10 ? `${d.toFixed(1)} km` : `${Math.round(d).toLocaleString()} km`;
+
+// ---------- markers taken from the charts ----------
+// The newest OBSERVED value in a station's chart (same series, same time axis as
+// renderChart). Returns {v, t} or null.
+function chartLatest(s, p) {
+  const H = srcObs(p), ser = srcSeries(p)[s.id];
+  if (!H || !ser || !H.history_t0_local) return null;
+  const a = arr(ser[p]);
+  let i = a.length - 1;
+  while (i >= 0 && !isNum(a[i])) i--;
+  if (i < 0) return null;
+  return { v: a[i], t: parseTime(H.history_t0_local).getTime() + i * 3600e3 };
+}
+// Value a station shows on the map and in the list. Observed variables: exactly the
+// chart's newest observation, or nothing (the station is then not shown). Forecast-only
+// variables, and stations already labelled "(forecast)", keep their forecast value,
+// which is what their chart shows.
+function applyChartValues(p) {
+  for (const s of stationsOf(p)) {
+    if ((POLL[p] && POLL[p].fcOnly) || s[p + '_fc']) continue;
+    const c = chartLatest(s, p);
+    s[p] = c ? c.v : null;
+    s[p + '_time'] = c ? localStr(c.t) : '';
+  }
+}
+// A station is listed and drawn only when it has a value its chart agrees with.
+// Rain: dry gauges (0 mm) are left out, so only gauges that recorded rain show.
+const shownStation = (s, p) => isNum(s[p]) && !(p === 'RAIN' && s[p] < 0.05);
+
+function renderStations() {
+  stnLayer.clearLayers();
+  if (state.hideObs) return;              // "Hide observations": leave only the forecast map and fires
+  const p = state.poll;
+  for (const s of curStations()) {
+    if (!isNum(s.lat) || !isNum(s.lon) || !shownStation(s, p)) continue;
+    const v = s[p];
+    const sel = s.id === state.sel ? ' sel' : '';
+    let html, size;
+    if (isNum(v)) {
+      const c = valColor(p, v);
+      html = `<div class="stn${sel}" style="background:${c.bg};color:${c.ink}">${isHealth(p) ? hcat(v).short : fmtVal(p, v)}</div>`;
+      size = 30;
+    } else {
+      html = `<div class="stn none${sel}"></div>`;
+      size = 12;
+    }
+    const m = L.marker([s.lat, s.lon], {
+      icon: L.divIcon({ className: 'stn-wrap', html, iconSize: [size, size] }),
+      zIndexOffset: isNum(v) ? Math.round(v * 10) : -1000,
+      title: s.name
+    });
+    const wdir = p === 'AWIND' ? s.AWDIR : s.WDIR;
+    const dir = ((p === 'WIND' || p === 'AWIND') && isNum(wdir)) ? ` from ${Math.round(wdir)}°` : '';
+    const fcTag = s[p + '_fc'] ? ' (forecast)' : '';
+    const dk = stationDist(s);
+    const dTxt = dk !== null ? `<br>${fmtDist(dk)} from you` : '';
+    m.bindTooltip(`<strong>${esc(s.name)}</strong><br>${isNum(v) ? `${fmtVal(p, v)} ${POLL[p].unit}${dir}${fcTag}, ${fmtTime(parseTime(s[p + '_time']))}` : 'No recent value'}${dTxt}`,
+      { direction: 'top', offset: [0, -size / 2] });
+    m.on('click', () => { state.userPicked = true; select(s.id, false); });
+    stnLayer.addLayer(m);
+  }
+}
+
+function hotspotList() {
+  const h = D.hotspots || {};
+  const t = arr(h.t), la = arr(h.lat), lo = arr(h.lon), fr = arr(h.frp), fe = arr(h.feed);
+  const now = Date.now(), out = [];
+  for (let i = 0; i < la.length; i++) {
+    const d = parseTime(t[i]);
+    if (!d) continue;
+    out.push({ d, ageH: (now - d.getTime()) / 3600e3, lat: la[i], lon: lo[i], frp: fr[i], feed: fe[i] });
+  }
+  return out;
+}
+
+function renderFire() {
+  fireLayer.clearLayers();
+  if (!state.fire) return;
+  for (const h of hotspotList()) {
+    const f = FIRE.find(x => h.ageH < x.maxH);
+    const r = Math.min(9, 2.5 + Math.sqrt(Math.max(h.frp || 0, 0)) / 2.5);
+    L.circleMarker([h.lat, h.lon], { radius: r, color: '#3A1500', weight: 0.6, fillColor: f.c, fillOpacity: 0.85 })
+      .bindTooltip(`Fire detected ${fmtTime(utcToLocal(h.d))} local<br>${isNum(h.frp) ? h.frp + ' MW radiative power, ' : ''}${esc(h.feed)}`)
+      .addTo(fireLayer);
+  }
+}
+
+// ---------- panel ----------
+function areaStations() {
+  const a = AREAS[state.area];
+  return curStations().filter(s => a.match(s.area || ''));
+}
+function inBounds(lat, lon, b) {
+  return lat >= b[0][0] && lat <= b[1][0] && lon >= b[0][1] && lon <= b[1][1];
+}
+
+function lidarSummary(a, sts, rep) {
+  const f = v => `${Math.round(v).toLocaleString()} m`;
+  return rep.map(s => {
+    const t = parseTime(s.PBLH_time);
+    const obs = !s.PBLH_fc;
+    return `<strong>${esc(s.name)}${t ? ', ' + fmtTime(t) : ''}.</strong> PBL height <strong>${f(s.PBLH)}</strong>` +
+      (obs ? ' (LiDAR)' : ' (forecast; no recent LiDAR value)') +
+      (obs && isNum(s.ALT) ? `; aerosol layer top ${f(s.ALT)}` : '') + '.';
+  }).join(' ');
+}
+
+function astroSummary(a, p, sts, rep) {
+  const P = POLL[p], f = v => `${fmtVal(p, v)} ${P.unit}`;
+  const parts = rep.slice().sort((x, y) => y[p] - x[p])
+    .map(s => `${esc(s.name)} <strong>${f(s[p])}</strong>`).join('; ');
+  const latest = rep.map(s => parseTime(s[p + '_time'])).filter(Boolean).sort((x, y) => y - x)[0];
+  let txt = `<strong>${a.label}${latest ? ', ' + fmtTime(latest) : ''}.</strong> ${P.label}${P.fcOnly ? ' (forecast for this hour)' : ''}: ${parts}.`;
+  if (p === 'ADPS') {
+    const dew = rep.filter(s => s[p] < 2);
+    txt += dew.length ? ` Dew risk on optics at ${dew.map(s => esc(s.name)).join(', ')} (spread under 2 °C).` : ' No dew risk at the moment.';
+  }
+  return txt;
+}
+
+function metSummary(a, p, sts, rep) {
+  const P = POLL[p], f = v => `${fmtVal(p, v)} ${P.unit}`;
+  const top = rep.reduce((m, s) => s[p] > m[p] ? s : m), low = rep.reduce((m, s) => s[p] < m[p] ? s : m);
+  const latest = rep.map(s => parseTime(s[p + '_time'])).filter(Boolean).sort((x, y) => y - x)[0];
+  let txt = `<strong>${a.label}${latest ? ', ' + fmtTime(latest) : ''}.</strong> ${rep.length} of ${sts.length} TMD stations reporting. `;
+  if (p === 'TEMP') txt += `Temperatures from ${f(low[p])} to <strong>${f(top[p])}</strong>; warmest at ${esc(top.name)}.`;
+  else if (p === 'RH') txt += `Humidity from <strong>${f(low[p])}</strong> to ${f(top[p])}; driest at ${esc(low.name)}.`;
+  else if (p === 'WIND') txt += `Strongest wind <strong>${f(top[p])}</strong> at ${esc(top.name)}${isNum(top.WDIR) ? `, from ${Math.round(top.WDIR)}°` : ''}.`;
+  else if (p === 'RAIN') {
+    const wet = rep.filter(s => s[p] > 0);
+    txt += wet.length ? `Rain in the last hour at ${wet.length} station${wet.length === 1 ? '' : 's'}; heaviest <strong>${fmtVal(p, top[p])} mm</strong> at ${esc(top.name)}.`
+                      : 'No rain in the last hour.';
+  }
+  return txt;
+}
+
+function renderSummary() {
+  const a = AREAS[state.area], p = state.poll, P = POLL[p];
+  const sts = areaStations();
+  const rep = sts.filter(s => isNum(s[p]));
+  let txt = '';
+  if (isHealth(p) && sts.length && rep.length) {
+    const n = [0, 1, 2].map(k => rep.filter(s => Math.round(s[p]) === k).length);
+    const latest = rep.map(s => parseTime(s[p + '_time'])).filter(Boolean).sort((x, y) => y - x)[0];
+    txt = `<strong>${a.label}${latest ? ', ' + fmtTime(latest) : ''}: ${P.label} risk.</strong> ` +
+      `${n[2]} station${n[2] === 1 ? '' : 's'} high, ${n[1]} moderate, ${n[0]} low (of ${rep.length} reporting). ${P.basis}`;
+  } else if (isLidar(p) && sts.length && rep.length) {
+    txt = lidarSummary(a, sts, rep);
+  } else if (isAstro(p) && sts.length && rep.length) {
+    txt = astroSummary(a, p, sts, rep);
+  } else if (isMet(p) && sts.length && rep.length) {
+    txt = metSummary(a, p, sts, rep);
+  } else if (!sts.length) {
+    txt = `No ${isAstro(p) ? 'NARIT observatories' : isMet(p) ? 'weather stations' : P.label + ' stations'} found for ${a.label}.`;
+  } else if (!rep.length) {
+    txt = `${a.label}: none of the ${sts.length} stations has a recent ${P.label} value.`;
+  } else {
+    const top = rep.reduce((m, s) => s[p] > m[p] ? s : m);
+    const latest = rep.map(s => parseTime(s[p + '_time'])).filter(Boolean).sort((x, y) => y - x)[0];
+    txt = `<strong>${a.label}${latest ? ', ' + fmtTime(latest) : ''}.</strong> ${rep.length} of ${sts.length} stations reporting ${P.label}. ` +
+          `Highest is <strong>${fmtVal(p, top[p])} ${P.unit}</strong> at ${esc(top.name)}.`;
+    if (P.std) {
+      const n = rep.filter(s => s[p] > P.std).length;
+      txt += ` ${n === 0 ? 'No station is' : n === 1 ? '1 station is' : n + ' stations are'} above the ${P.std} ${P.unit} Thai standard.`;
+    }
+  }
+  const hs = hotspotList().filter(h => inBounds(h.lat, h.lon, a.bounds));
+  const n24 = hs.filter(h => h.ageH < 24).length;
+  txt += ` ${n24} fire hotspot${n24 === 1 ? '' : 's'} in the last 24 h, ${hs.length} in the last ${D.hotspot_days || 3} days.`;
+  $('#summary').innerHTML = txt;
+  $('#fcSummary').innerHTML = forecastTomorrow();
+}
+
+function renderLegend() {
+  const p = state.poll;
+  const fireTxt = `<div class="items"><span>Fire hotspots, by time since detection:</span>${FIRE.map(f => `<span><span class="sw" style="background:${f.c}"></span>${f.name}</span>`).join('')}</div>`;
+  if (state.ovRadar && RAD && p === 'RAIN') {
+    // Gauges are drawn in the radar's colour classes, so the legend shows those classes
+    $('#legend').innerHTML = `<div style="display:grid;gap:2px">${radarLegendHtml()}</div>` +
+      `<div class="items"><span>Circles: TMD rain gauges that recorded rain in the last hour (mm); dry gauges are not shown.</span></div>` + fireTxt;
+    const bar = $('#legend .bar');
+    if (bar) bar.style.cssText += ';height:10px;border-radius:3px;border:1px solid var(--line)';
+    const ticks = $('#legend .ticks');
+    if (ticks) ticks.style.cssText += ';font-size:0.75rem;font-variant-numeric:tabular-nums';
+    return;
+  }
+  if (!aqiMode(p)) {
+    const P = POLL[p];
+    const aqiTxt = P.bands ? `<div class="items"><span>Thai AQI breakpoints: ${P.bands.join(' / ')} ${P.unit}` +
+      `${P.std ? `; 24-h standard ${P.std} ${P.unit}` : ''}</span></div>` : '';
+    $('#legend').innerHTML = `<div id="metBar" style="display:grid;gap:2px">${scaleBarHtml(p)}</div>` + aqiTxt + fireTxt;
+    const bar = $('#legend .bar');
+    if (bar) bar.style.cssText += ';height:10px;border-radius:3px;border:1px solid var(--line)';
+    const ticks = $('#legend .ticks');
+    if (ticks) ticks.style.cssText = 'display:flex;justify-content:space-between;font-size:0.75rem;font-variant-numeric:tabular-nums';
+    return;
+  }
+  const b = POLL[p].bands;
+  const ranges = [`up to ${b[0]}`, `${b[0]} to ${b[1]}`, `${b[1]} to ${b[2]}`, `${b[2]} to ${b[3]}`, `above ${b[3]}`];
+  $('#legend').innerHTML =
+    `<div class="items">${CAT.map((c, i) => `<span><span class="sw" style="background:${c.c}"></span>${c.name} (${ranges[i]})</span>`).join('')}</div>` +
+    `<div class="items"><span>Fire hotspots, by time since detection:</span>${FIRE.map(f => `<span><span class="sw" style="background:${f.c}"></span>${f.name}</span>`).join('')}</div>`;
+}
+
+function renderList() {
+  const p = state.poll;
+  const byDist = state.me && state.sort === 'dist';
+  const sts = areaStations().filter(s => shownStation(s, p)).sort(byDist
+    ? (x, y) => (stationDist(x) ?? Infinity) - (stationDist(y) ?? Infinity)
+    : (x, y) => (isNum(y[p]) ? y[p] : -1) - (isNum(x[p]) ? x[p] : -1));
+  $('#listNote').textContent = byDist
+    ? 'Latest hourly value, nearest to you first. Select a station to see its recent history.'
+    : 'Latest hourly value, highest first. Select a station to see its recent history.';
+  $('#stationList').innerHTML = sts.map(s => {
+    const v = s[p];
+    const pc = isNum(v) ? valColor(p, v) : null;
+    const pill = isNum(v)
+      ? `<span class="pill" style="background:${pc.bg};color:${pc.ink}">${fmtVal(p, v)}</span>`
+      : `<span class="pill none">none</span>`;
+    const dk = stationDist(s);
+    const dTxt = dk !== null ? `<span class="dist">${fmtDist(dk)}</span> · ` : '';
+    return `<li><button type="button" class="stnrow" data-id="${esc(s.id)}" aria-current="${s.id === state.sel}">${pill}<span class="nm">${esc(s.name)}<small>${dTxt}${esc(s.area)}</small></span></button></li>`;
+  }).join('') || '<li class="muted small">No stations in this area.</li>';
+}
+
+// Points with no neighbour on either side are drawn as dots (a line needs two points),
+// e.g. the first readings of a new archive or values between gaps.
+const isolatedDot = r => ctx => {
+  const d = ctx.dataset.data, i = ctx.dataIndex;
+  return (d[i] != null && d[i - 1] == null && d[i + 1] == null) ? r : 0;
+};
+
+// Legend under the station chart: a drawn sample of each line (solid / dashed / dotted,
+// same colour and width as on the chart), a filled box for bars and for the forecast range
+function renderChartLegend(datasets, show) {
+  const el = $('#chartLegend');
+  el.hidden = !show;
+  if (!show) { el.innerHTML = ''; return; }
+  el.innerHTML = datasets.filter(d => d.label !== 'range-min').map(d => {
+    const col = d.borderColor || d.backgroundColor || 'currentColor';
+    let sw;
+    if (d.type === 'bar' || d.fill) {
+      sw = `<svg width="30" height="12" aria-hidden="true"><rect x="1" y="2" width="28" height="8" rx="2" fill="${d.backgroundColor}"/></svg>`;
+    } else {
+      const dash = d.borderDash && d.borderDash.length ? ` stroke-dasharray="${d.borderDash.join(' ')}"` : '';
+      const w = Math.max(2, (d.borderWidth || 1) + 0.6);
+      sw = `<svg width="30" height="12" aria-hidden="true"><line x1="1" y1="6" x2="29" y2="6" stroke="${col}" stroke-width="${w}"${dash}/></svg>`;
+    }
+    return `<span>${sw}${esc(d.label)}</span>`;
+  }).join('');
+}
+
+// Vertical "now" line on the station chart
+const nowLinePlugin = {
+  id: 'nowLine',
+  afterDatasetsDraw(c, args, opts) {
+    const i = opts && opts.index;
+    if (i == null || i < 0 || i >= c.data.labels.length) return;
+    const x = c.scales.x.getPixelForValue(i);
+    const { top, bottom, left, right } = c.chartArea;
+    if (x < left || x > right) return;
+    const ctx = c.ctx;
+    ctx.save();
+    ctx.strokeStyle = opts.color; ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
+    ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
+    ctx.setLineDash([]); ctx.fillStyle = opts.color;
+    ctx.font = '11px ' + getComputedStyle(document.body).fontFamily;
+    ctx.fillText('now', x + 4, top + 11);
+    ctx.restore();
+  }
+};
+
+function renderChart() {
+  const p = state.poll, P = POLL[p], met = isCont(p);
+  const s = curStations().find(x => x.id === state.sel);
+  const ser = srcSeries(p)[state.sel];
+  const HIST = srcObs(p), FCX = srcFc(p);
+  $('#detail').hidden = !s;
+  if (!s) return;
+  $('#detailTitle').textContent = s.name;
+
+  // Common hourly axis: observed history, extended to the end of the forecast
+  if (!HIST) { $('#detail').hidden = true; return; }
+  const hT0 = parseTime(HIST.history_t0_local).getTime();
+  const hN = HIST.history_n || 0;
+  const obsRaw = ser ? arr(ser[p]) : [];
+  const fsAll = FCX ? srcFcById(p)[state.sel] : null;
+  const fs = (fsAll && arr(fsAll[p]).length) ? fsAll : null;
+  const fT0 = fs ? parseTime(FCX.t0_local).getTime() : null;
+  let end = hT0 + (Math.max(hN, 1) - 1) * 3600e3;
+  if (fs) end = Math.max(end, fT0 + (FCX.n - 1) * 3600e3);
+  const N = Math.round((end - hT0) / 3600e3) + 1;
+
+  const obs = new Array(N).fill(null);
+  obsRaw.forEach((v, i) => { if (i < N && isNum(v)) obs[i] = v; });
+  // Forecast: latest run, plus ensemble mean / min / max over the time-lagged members
+  const fc = new Array(N).fill(null), fcPbl = new Array(N).fill(null), fcRain = new Array(N).fill(null);
+  const eMean = new Array(N).fill(null), eMin = new Array(N).fill(null), eMax = new Array(N).fill(null), eK = new Array(N).fill(0);
+  const cor = fs ? corOf(state.sel, p) : null;
+  const fix = v => applyCor(v, cor, p);
+  const members = ensMembers(fs, p).map(m => arr(m).map(fix));
+  const fcDir = new Array(N).fill(null), fcLayers = new Array(N).fill(null);
+  const fcRaw = new Array(N).fill(null);
+  if (fs) {
+    const off = Math.round((fT0 - hT0) / 3600e3);
+    const pm = arr(fs[p]), pb = arr(fs.PBLH), rn = arr(met ? [] : fs.RAIN1H), wd = arr(fs.WDIR || fs.AWDIR);
+    const cl = [arr(fs.ACLOUD_LOW), arr(fs.ACLOUD_MID), arr(fs.ACLOUD_HIGH)];
+    for (let i = 0; i < pm.length; i++) {
+      const k = off + i;
+      if (k < 0 || k >= N) continue;
+      if (isNum(pm[i])) { fc[k] = fix(pm[i]); fcRaw[k] = pm[i]; }
+      if (isNum(pb[i])) fcPbl[k] = pb[i];
+      if (isNum(rn[i])) fcRain[k] = rn[i];
+      if (isNum(wd[i])) fcDir[k] = wd[i];
+      if (p === 'ACLOUD' && isNum(cl[0][i])) fcLayers[k] = [cl[0][i], cl[1][i], cl[2][i]];
+      const v = members.map(m => arr(m)[i]).filter(isNum);
+      if (v.length) {
+        eK[k] = v.length;
+        eMean[k] = Math.round(v.reduce((a, b) => a + b, 0) / v.length * 10) / 10;
+        if (v.length > 1) { eMin[k] = Math.min(...v); eMax[k] = Math.max(...v); }
+      }
+    }
+  }
+  const nMem = members.length;
+  const hasObs = obs.some(v => v !== null), hasFc = fc.some(v => v !== null);
+
+  // Short-range blend (length chosen by extractWRFForecast.m from the last week): the first
+  // hours after the latest observation start from it -- the observed-minus-model difference
+  // (mean of the last 3 hours) is added with a weight falling from 1 to 0 over tau hours.
+  let blendNote = '';
+  const bl = state.cor && COR && COR.blend && !Array.isArray(COR.blend) ? COR.blend[p] : null;
+  if (bl && bl.tau_h > 0 && hasObs && hasFc) {
+    const nowIdx = Math.floor((nowLocalMs() - hT0) / 3600e3);
+    let io = Math.min(nowIdx, N - 1);
+    while (io >= 0 && obs[io] === null) io--;
+    if (io >= 0 && nowIdx - io <= 3) {
+      const ref = k => isNum(eMean[k]) ? eMean[k] : fc[k];
+      const ds = [];
+      for (let k = io - (bl.obs_hours || 3) + 1; k <= io; k++) if (k >= 0 && obs[k] !== null && isNum(ref(k))) ds.push(obs[k] - ref(k));
+      if (ds.length) {
+        const d = ds.reduce((a, b) => a + b, 0) / ds.length;
+        for (let k = io + 1; k < N; k++) {
+          const w = 1 - (k - io) / bl.tau_h;
+          if (w <= 0) break;
+          for (const A of [fc, eMean, eMin, eMax]) if (isNum(A[k])) A[k] = Math.max(0, A[k] + w * d);
+        }
+        blendNote = ` The first ${bl.tau_h} hours after the latest observation start from it ` +
+          `(observed ${d >= 0 ? '+' : ''}${fmtVal(p, d)} ${P.unit} relative to the forecast, fading out over ${bl.tau_h} h); ` +
+          `over the last week this cut the typical error (RMSE) of the next ${bl.lead_max_h || 24} hours from ` +
+          `${fmtVal(p, bl.rmse_model)} to ${fmtVal(p, bl.rmse_blend)} ${P.unit}.`;
+      }
+    }
+  }
+
+  let sub = isHealth(p)
+    ? `${s.area}. Hourly ${P.label} risk, local time. ${P.basis}` +
+      (P.combined ? (s.pair_name ? ` Weather from ${s.pair_name} (${s.pair_km} km away).` : ' No TMD station within 30 km, so no combined risk here.') : '')
+    : `${s.area}. Hourly ${P.label} (${P.unit}), local time.`;
+  if (!hasObs) sub = `${s.area}. No observed ${P.label} values in the last ${D.history_days || 7} days.`;
+  if (isLidar(p)) {
+    sub = hasObs ? `${s.area}. Hourly mean LiDAR PBL height (m above ground, solid), temperature-constrained retrieval; dashed: aerosol layer top. Local time.`
+                 : `${s.area}. PBL height (m above ground): no LiDAR values in the last ${D.history_days || 7} days.`;
+  } else if (isAstro(p)) {
+    if (p === 'ASEEING') {
+      sub = hasObs ? `${s.area}. Hourly mean DIMM seeing at 500 nm (arcsec), local time.`
+                   : `${s.area}. Seeing at 500 nm (arcsec): forecast only, no DIMM at this site.`;
+    } else {
+      sub = P.fcOnly ? `${s.area}. ${P.label} (${P.unit}): forecast only, no instrument at the site.`
+                     : sub.replace('Hourly', 'Hourly mean, NARIT weather station:');
+    }
+  } else if (met) {
+    sub = sub.replace('Hourly', 'Hourly TMD');
+    const nObs = obs.filter(v => v !== null).length;
+    if (hasObs && nObs < 24) sub += ` Only ${nObs} observed hour${nObs === 1 ? '' : 's'} so far: the TMD archive has just started and fills in hourly.`;
+  }
+  if (hasFc && nMem > 1) sub += ` Dashed line: mean of the up to ${nMem} most recent WRF-Chem runs covering each hour (${runsRangeTxt()}), ` +
+    `reaching back over the observed period; each run's first hour and values far from the other runs are left out; shading: their range; thick solid line: the latest run.`;
+  else if (hasFc) sub += ` Dashed line: WRF-Chem forecast from the run of ${fmtTime(parseTime(FCX.init_local))}.`;
+  else if (isLidar(p) && !FCX) sub += ' No WRF-Chem PBL height forecast loaded (dashboard_data/forecast_lidar.json missing).';
+  else if (FCX) sub += ` No ${P.label} forecast for this station.`;
+  if (hasFc) sub += corDescription(cor);
+  sub += blendNote;
+  const nq = ser && ser.__qc ? (ser.__qc[p] || 0) : 0;
+  if (nq) sub += ` ${nq} observed value${nq === 1 ? '' : 's'} removed by quality checks (out of range, spikes or stuck sensor).`;
+  $('#detailSub').textContent = sub;
+
+  const labels = obs.map((_, i) => {
+    const d = new Date(hT0 + i * 3600e3);
+    return [`${d.getUTCDate()} ${MON[d.getUTCMonth()]}`, `${pad(d.getUTCHours())}:00`];
+  });
+  const nowIdx = Math.round((nowLocalMs() - hT0) / 3600e3);
+
+  const css = getComputedStyle(document.documentElement);
+  const accent = css.getPropertyValue('--accent').trim();
+  const fcCol = css.getPropertyValue('--fc').trim();
+  const muted = css.getPropertyValue('--muted').trim();
+  const line = css.getPropertyValue('--line').trim();
+
+  const datasets = [P.bar ? {
+    type: 'bar', label: 'Observed', data: obs, backgroundColor: accent + 'AA', borderWidth: 0
+  } : {
+    label: isLidar(p) ? 'PBL height (LiDAR)' : 'Observed', data: obs, borderColor: accent, backgroundColor: accent, borderWidth: 1.6,
+    pointRadius: 0, pointHoverRadius: 4, tension: isHealth(p) ? 0 : 0.2, spanGaps: false, stepped: isHealth(p) ? 'middle' : false
+  }];
+  if (hasFc && nMem > 1 && P.bar) {
+    datasets.push({ type: 'bar', label: `Forecast, mean of ${nMem} runs`, data: eMean, backgroundColor: fcCol + '99', borderWidth: 0 });
+  } else if (hasFc && nMem > 1) {
+    datasets.push({
+      label: 'range-min', data: eMin, borderWidth: 0, pointRadius: 0, pointHoverRadius: 0, fill: false, tension: 0.2
+    }, {
+      label: `Range of ${nMem} runs`, data: eMax, borderWidth: 0, pointRadius: 0, pointHoverRadius: 0,
+      fill: '-1', backgroundColor: fcCol + '33', borderColor: fcCol + '33', tension: 0.2
+    }, {
+      label: `Forecast, mean of ${nMem} runs`, data: eMean, borderColor: fcCol, borderWidth: 1.8, borderDash: [6, 3],
+      pointRadius: 0, pointHoverRadius: 4, tension: 0.2, spanGaps: false
+    }, {
+      // Latest run: full colour, thick, drawn on top (lower order = drawn later) so it stands out
+      label: isHealth(p) ? 'Forecast (corrected ensemble mean)' : 'Latest run', data: fc, borderColor: fcCol, backgroundColor: fcCol, borderWidth: 2.6, pointRadius: 0,
+      stepped: isHealth(p) ? 'middle' : false,
+      pointHoverRadius: 4, tension: 0.2, spanGaps: false, order: -1
+    });
+  } else if (hasFc && P.bar) {
+    datasets.push({ type: 'bar', label: 'Forecast (WRF-Chem)', data: fc, backgroundColor: fcCol + '99', borderWidth: 0 });
+  } else if (hasFc) {
+    datasets.push({
+      label: 'Forecast (WRF-Chem)', data: fc, borderColor: fcCol, backgroundColor: fcCol, borderWidth: 1.6, borderDash: [6, 3],
+      pointRadius: 0, pointHoverRadius: 4, tension: 0.2, spanGaps: false
+    });
+  }
+  if (isLidar(p) && ser && arr(ser.ALT).some(isNum)) {
+    const alt = new Array(N).fill(null);
+    arr(ser.ALT).forEach((v, i) => { if (i < N && isNum(v)) alt[i] = v; });
+    datasets.push({ label: 'Aerosol layer top (LiDAR)', data: alt, borderColor: accent, borderWidth: 1.4,
+      borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 3, tension: 0.2, spanGaps: false });
+  }
+  if (hasFc && cor) datasets.push({
+    label: 'Raw model (latest run)', data: fcRaw, borderColor: muted + '99', borderWidth: 1, borderDash: [2, 2],
+    pointRadius: 0, pointHoverRadius: 3, tension: 0.2, spanGaps: false
+  });
+  if (P.std) datasets.push({
+    label: `Thai 24-h standard (${P.std})`, data: obs.map(() => P.std), borderColor: '#E05A2A',
+    borderWidth: 1.2, borderDash: [5, 4], pointRadius: 0, pointHoverRadius: 0
+  });
+
+  // The axis starts at the first hour with any data (observed, aerosol layer top or forecast)
+  let first = -1;
+  for (const d of datasets) {
+    if (d.label.indexOf('standard') !== -1) continue;
+    const j = d.data.findIndex(v => v !== null && v !== undefined);
+    if (j >= 0 && (first < 0 || j < first)) first = j;
+  }
+  if (first < 0) first = 0;
+  // Keep the zoom (by time) when the page refreshes the same station and variable
+  const zKey = `${state.sel}:${p}`;
+  let xMin = first, xMax = N - 1;
+  if (state.zoom && state.zoom.key === zKey) {
+    xMin = Math.max(first, Math.round((state.zoom.t0 - hT0) / 3600e3));
+    xMax = Math.min(N - 1, Math.round((state.zoom.t1 - hT0) / 3600e3));
+    if (xMax - xMin < 3) { xMin = first; xMax = N - 1; state.zoom = null; }
+  } else {
+    state.zoom = null;
+  }
+  const saveZoom = ({ chart: c }) => {
+    const sx = c.scales.x;
+    const zoomed = sx.min > first || sx.max < N - 1;
+    state.zoom = zoomed ? { key: zKey, t0: hT0 + sx.min * 3600e3, t1: hT0 + sx.max * 3600e3 } : null;
+    $('#zoomReset').hidden = !zoomed;
+  };
+  $('#zoomReset').hidden = !state.zoom;
+
+  renderChartLegend(datasets, hasFc || !!P.std || isLidar(p));
+
+  if (chart) chart.destroy();
+  chart = new Chart($('#chart'), {
+    type: 'line',
+    data: { labels, datasets },
+    plugins: [nowLinePlugin],
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { min: xMin, max: xMax, ticks: { color: muted, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }, grid: { color: line } },
+        y: isHealth(p)
+          ? { min: -0.25, max: 2.25, ticks: { color: muted, stepSize: 1, callback: v => (HCAT[v] ? HCAT[v].name : '') },
+              grid: { color: line }, title: { display: true, text: 'risk', color: muted } }
+          : { beginAtZero: P.zero !== false, ticks: { color: muted }, grid: { color: line },
+              title: { display: true, text: P.unit, color: muted } }
+      },
+      plugins: {
+        legend: { display: false },          // drawn as HTML below the chart (renderChartLegend)
+        nowLine: { index: nowIdx, color: muted },
+        zoom: {
+          limits: { x: { min: first, max: N - 1, minRange: 3 } },
+          pan: { enabled: true, mode: 'x', modifierKey: 'shift', onPanComplete: saveZoom },
+          zoom: { mode: 'x', onZoomComplete: saveZoom,
+                  drag: { enabled: true, backgroundColor: fcCol + '22', borderColor: fcCol, borderWidth: 1 },
+                  pinch: { enabled: true }, wheel: { enabled: true, modifierKey: 'ctrl' } }
+        },
+        tooltip: {
+          filter: item => item.dataset.label.indexOf('standard') === -1 && item.dataset.label !== 'range-min' &&
+                          item.dataset.label.indexOf('Range of') !== 0,
+          callbacks: {
+            title: items => items[0].label.join(' '),
+            afterBody: items => {
+              const i = items[0].dataIndex, out = [];
+              if (eK[i] > 1) out.push(`Range of ${eK[i]} runs: ${fmtVal(p, eMin[i])} to ${fmtVal(p, eMax[i])} ${P.unit}`);
+              if ((p === 'WIND' || p === 'AWIND') && fcDir[i] !== null) out.push(`Forecast wind from ${Math.round(fcDir[i])}°`);
+              if (fcLayers[i]) out.push(`Low / mid / high cloud: ${fcLayers[i].map(Math.round).join(' / ')} %`);
+              if (fcPbl[i] !== null && !isLidar(p)) out.push(`Forecast boundary layer: ${Math.round(fcPbl[i])} m`);
+              if (fcRain[i] !== null && fcRain[i] > 0) out.push(`Forecast rain: ${fcRain[i]} mm/h`);
+              return out;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+// ---------- observation-based correction ----------
+// ln(F + c) = x + beta + (scale - 1)(x - mf), with x = ln(raw + c)  (see extractWRFForecast.m)
+function corOf(id, p) {
+  if (!state.cor || !COR) return null;
+  const c = corById[id];
+  return c && c[p] ? c[p] : null;
+}
+// Correction space per variable (from forecast_correction.json "transforms"):
+// log: x = ln(v + offset)   lin: x = v   -- then clipped to the variable's [min, max]
+function trOf(p) {
+  const t = COR && COR.transforms && COR.transforms[p];
+  if (t) return t;
+  return { type: 'log', offset: (COR && COR.offsets && COR.offsets[p]) || 1, min: 0, max: null };
+}
+function corApply(v, beta, scale, mf, tr) {
+  let y;
+  if (tr.type === 'lin') {
+    y = v + beta + (scale - 1) * (v - mf);
+  } else {
+    const c = tr.offset || 0, x = Math.log(Math.max(v, 0) + c);
+    y = Math.max(0, Math.exp(x + beta + (scale - 1) * (x - mf)) - c);
+  }
+  if (isNum(tr.min) && y < tr.min) y = tr.min;
+  if (isNum(tr.max) && y > tr.max) y = tr.max;
+  return y;
+}
+function applyCor(v, c, p) {
+  if (!c || !isNum(v)) return v;
+  return Math.round(corApply(v, c.beta, c.scale, c.mf, trOf(p)) * 100) / 100;
+}
+// Corrected ensemble mean for one station (used by the summary sentences and markers)
+function corMean(s, p) {
+  const c = corOf(s.id, p);
+  return ensMean(s, p).map(v => applyCor(v, c, p));
+}
+// Stations that carry observations for a variable (also the correction anchors on its map)
+function stationsOf(p) {
+  if (isHealth(p)) return healthStations(p);
+  if (isLidar(p)) return LID ? arr(LID.stations) : [];
+  if (isAstro(p)) return AST ? arr(AST.stations) : [];
+  if (isMet(p)) return MET ? arr(MET.stations) : [];
+  return D.stations;
+}
+const corKey = () => (state.cor && COR) ? COR.generated_local : 'raw';
+
+// Correction spread over the map grid: Gaussian weights around each corrected
+// station, fading to no correction away from stations (prior weight w0).
+function corField(p) {
+  if (!state.cor || !COR || !FG) return null;
+  const key = `${p}:${COR.generated_local}:${FG.lat0}:${FG.lon0}:${FG.nlat}:${FG.nlon}`;
+  if (key in corFieldCache) return corFieldCache[key];
+  const st = [];
+  for (const s of stationsOf(p)) {
+    const c = corById[s.id] && corById[s.id][p];
+    if (c && isNum(s.lat) && isNum(s.lon)) st.push({ lat: s.lat, lon: s.lon, c });
+  }
+  if (!st.length) return (corFieldCache[key] = null);
+  const R = COR.map_radius_km || 40, w0 = COR.map_prior_weight || 0.1, R2 = R * R, cut = 9 * R2;
+  const n = FG.nlat * FG.nlon;
+  const B = new Float32Array(n), S1 = new Float32Array(n), MF = new Float32Array(n);
+  for (let ri = 0; ri < FG.nlat; ri++) {
+    const la = FG.lat0 + ri * FG.dlat, kx = 111.32 * Math.cos(la * Math.PI / 180);
+    for (let ci = 0; ci < FG.nlon; ci++) {
+      const lo = FG.lon0 + ci * FG.dlon;
+      let sw = 0, sb = 0, ss = 0, sm = 0;
+      for (const t of st) {
+        const dx = (lo - t.lon) * kx, dy = (la - t.lat) * 110.57, d2 = dx * dx + dy * dy;
+        if (d2 > cut) continue;
+        const w = Math.exp(-d2 / R2);
+        sw += w; sb += w * t.c.beta; ss += w * (t.c.scale - 1); sm += w * t.c.mf;
+      }
+      const k = ri * FG.nlon + ci;
+      if (sw > 0) { B[k] = sb / (w0 + sw); S1[k] = ss / (w0 + sw); MF[k] = sm / sw; }
+    }
+  }
+  return (corFieldCache[key] = { B, S1, MF, tr: trOf(p) });
+}
+function corDescription(c) {
+  if (!state.cor || !COR) return '';
+  if (!c) return ' No forecast correction yet at this station (too few matched hours).';
+  if (c.mode === 'none') {
+    const Pn = POLL[state.poll];
+    return ` Not corrected: on the most recent days, correcting did not reduce this station's errors, so the raw model is shown` +
+      (isNum(c.rmse_raw) ? ` (typical error, RMSE, ${fmtVal(state.poll, c.rmse_raw)} ${Pn.unit})` : '') + '.';
+  }
+  const f = Math.exp(c.beta);
+  const P = POLL[state.poll];
+  const ratio = trOf(state.poll).type === 'lin'
+    ? `observations ${c.beta >= 0 ? '+' : ''}${fmtVal(state.poll, c.beta)} ${P.unit} relative to the model on average`
+    : (f >= 1 ? `observations about ${f.toFixed(1)}× the model` : `observations about ${(1 / f).toFixed(1)}× below the model`);
+  const what = c.mode === 'bias+variability'
+    ? `bias and variability (ups and downs ×${c.scale.toFixed(2)})`
+    : c.eligible_variability ? 'bias only (correcting the ups and downs as well did not reduce errors on the most recent days)'
+    : c.n >= 48 ? 'bias only (the model does not follow the observed ups and downs closely enough to stretch them)'
+    : 'bias only (not enough data yet for variability)';
+  const since = COR.pairs_from_local ? `since ${fmtDate(parseTime(COR.pairs_from_local))}` : `over the last ${COR.window_days} days`;
+  const skill = isNum(c.rmse_raw) && isNum(c.rmse_cor)
+    ? ` Typical error (RMSE) ${fmtVal(state.poll, c.rmse_raw)} ${P.unit} for the raw model, ${fmtVal(state.poll, c.rmse_cor)} ${P.unit} after correction` +
+      (isNum(c.r_raw) ? `; correlation with observations ${c.r_raw.toFixed(2)}` : '') + '.'
+    : '';
+  return ` Forecast corrected for ${what}; ${ratio}, from ${c.n} matched hours ${since}.${skill}`;
+}
+
+// ---------- forecast ----------
+// Time-lagged members (members x hours, newest first). PM2.5 uses "ens"; the weather and
+// astronomy files use "ens_<VAR>". Falls back to the single latest run.
+function ensMembers(fs, p = 'PM25') {
+  if (!fs) return [];
+  const e = arr(p === 'PM25' ? fs.ens : fs['ens_' + p]);
+  if (!e.length) return arr(fs[p]).length ? [arr(fs[p])] : [];
+  return Array.isArray(e[0]) ? e : [e];        // one member is encoded as a flat array
+}
+// Hourly mean over the members (used for the summaries and forecast-only markers)
+function ensMean(fs, p) {
+  const ms = ensMembers(fs, p);
+  if (!ms.length) return [];
+  return arr(ms[0]).map((_, i) => {
+    const v = ms.map(m => arr(m)[i]).filter(isNum);
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+  });
+}
+const memberRuns = () => { const F = srcFc(state.poll); return F ? arr(F.members_init_local) : []; };
+const fmtDate = d => d ? `${d.getUTCDate()} ${MON[d.getUTCMonth()]}` : '';
+function runsRangeTxt() {
+  const r = memberRuns().map(parseTime).filter(Boolean).sort((a, b) => a - b);
+  if (r.length < 2) return FC ? `WRF-Chem run of ${fmtTime(parseTime(FC.init_local))}` : '';
+  const f = d => `${d.getUTCDate()} ${MON[d.getUTCMonth()]}`;
+  return `${r.length} WRF-Chem runs of ${f(r[0])} to ${f(r[r.length - 1])}`;
+}
+
+function metTomorrow() {
+  const p = state.poll;
+  if (!FM) return '';
+  const t0 = parseTime(FM.t0_local).getTime();
+  const nowL = new Date(nowLocalMs());
+  const tom = Date.UTC(nowL.getUTCFullYear(), nowL.getUTCMonth(), nowL.getUTCDate() + 1);
+  const i0 = Math.round((tom - t0) / 3600e3), i1 = i0 + 24;
+  const runTxt = `WRF-Chem run of ${fmtTime(parseTime(FM.init_local))}`;
+  if (i0 < 0 || i1 > FM.n) return `<span class="muted small">The latest complete forecast (${runTxt}) does not cover tomorrow.</span>`;
+  const ids = new Set(areaStations().map(s => s.id));
+  const nameOf = id => { const st = curStations().find(x => x.id === id); return esc(st ? st.name : id); };
+  let hi = null, lo = null, n = 0, wet10 = 0;
+  for (const s of arr(FM.stations)) {
+    if (!ids.has(s.id)) continue;
+    const v = corMean(s, p).slice(i0, i1).filter(isNum);
+    if (v.length < 18) continue;
+    n++;
+    const vmax = p === 'RAIN' ? v.reduce((a, b) => a + b, 0) : Math.max(...v), vmin = Math.min(...v);
+    if (p === 'RAIN' && vmax >= 10) wet10++;
+    if (!hi || vmax > hi.v) hi = { id: s.id, v: vmax };
+    if (!lo || vmin < lo.v) lo = { id: s.id, v: vmin };
+  }
+  if (!n) return '';
+  const d = new Date(tom), u = POLL[p].unit, f = v => fmtVal(p, v);
+  let txt = `<strong>Tomorrow, ${d.getUTCDate()} ${MON[d.getUTCMonth()]}:</strong> `;
+  if (p === 'TEMP') txt += `temperatures from ${f(lo.v)} to <strong>${f(hi.v)} ${u}</strong>; hottest at ${nameOf(hi.id)}.`;
+  else if (p === 'RH') txt += `humidity down to <strong>${f(lo.v)} ${u}</strong> at ${nameOf(lo.id)}.`;
+  else if (p === 'WIND') txt += `winds up to <strong>${f(hi.v)} ${u}</strong> at ${nameOf(hi.id)}.`;
+  else if (p === 'RAIN') txt += hi.v < 1 ? 'little or no rain expected (under 1 mm at every station).'
+    : `rain up to <strong>${f(hi.v)} mm</strong> over the day at ${nameOf(hi.id)}` +
+      (wet10 > 1 ? `; ${wet10} stations with 10 mm or more.` : '.');
+  return txt + ` <span class="muted small">From the ${memberRuns().length > 1 ? 'mean of the ' + runsRangeTxt() : runTxt}, at ${n} TMD stations.</span>`;
+}
+
+function lidarTomorrow() {
+  if (!FL) return '';
+  const t0 = parseTime(FL.t0_local).getTime();
+  const nowL = new Date(nowLocalMs());
+  const tom = Date.UTC(nowL.getUTCFullYear(), nowL.getUTCMonth(), nowL.getUTCDate() + 1);
+  const i0 = Math.round((tom - t0) / 3600e3), i1 = i0 + 24;
+  if (i0 < 0 || i1 > FL.n) return '';
+  const ids = new Set(areaStations().map(s => s.id));
+  const f = v => `${(Math.round(v / 50) * 50).toLocaleString()} m`;
+  const parts = [];
+  for (const s of arr(FL.stations)) {
+    if (!ids.has(s.id)) continue;
+    const v = corMean(s, 'PBLH').slice(i0, i1);
+    const good = v.map((x, i) => [x, i]).filter(([x]) => isNum(x));
+    if (good.length < 18) continue;
+    const [hi, iHi] = good.reduce((m, c) => c[0] > m[0] ? c : m);
+    const lo = Math.min(...good.map(g => g[0]));
+    const st = curStations().find(x => x.id === s.id);
+    parts.push(`${esc(st ? st.name : s.id)}: PBL height peaks around <strong>${f(hi)}</strong> near ${pad(iHi)}:00, down to ${f(lo)} at night`);
+  }
+  if (!parts.length) return '';
+  const d = new Date(tom);
+  return `<strong>Tomorrow, ${d.getUTCDate()} ${MON[d.getUTCMonth()]}:</strong> ${parts.join('; ')}. ` +
+    `<span class="muted small">From the ${memberRuns().length > 1 ? 'mean of the ' + runsRangeTxt() : 'WRF-Chem run of ' + fmtTime(parseTime(FL.init_local))}.</span>`;
+}
+
+// Tonight = 18:00 to 06:00 local (the current night if it is already dark)
+function astroTonight() {
+  const p = state.poll, P = POLL[p];
+  if (!FA) return '';
+  const t0 = parseTime(FA.t0_local).getTime();
+  const nowL = new Date(nowLocalMs());
+  const h = nowL.getUTCHours();
+  const day = Date.UTC(nowL.getUTCFullYear(), nowL.getUTCMonth(), nowL.getUTCDate());
+  const start = h < 6 ? day - 6 * 3600e3 : day + 18 * 3600e3;
+  const i0 = Math.max(0, Math.round((Math.max(start, nowL.getTime()) - t0) / 3600e3));
+  const i1 = Math.round((start + 12 * 3600e3 - t0) / 3600e3);
+  const runTxt = `WRF-Chem run of ${fmtTime(parseTime(FA.init_local))}`;
+  if (i1 > FA.n || i1 <= i0) return `<span class="muted small">The latest complete forecast (${runTxt}) does not cover tonight.</span>`;
+  const ids = new Set(areaStations().map(s => s.id));
+  const nameOf = id => { const st = curStations().find(x => x.id === id); return esc(st ? st.name : id); };
+  const rows = [];
+  for (const s of arr(FA.stations)) {
+    if (!ids.has(s.id)) continue;
+    const v = corMean(s, p).slice(i0, i1).filter(isNum);
+    if (v.length) rows.push({ id: s.id, mean: v.reduce((a, b) => a + b, 0) / v.length, min: Math.min(...v), max: Math.max(...v) });
+  }
+  if (!rows.length) return '';
+  const f = v => `${fmtVal(p, v)} ${P.unit}`;
+  let txt = '<strong>Tonight (18:00 to 06:00):</strong> ';
+  if (p === 'ACLOUD') {
+    txt += rows.map(r => `${nameOf(r.id)} ${r.mean < 20 ? 'mostly clear' : r.mean < 50 ? 'partly cloudy' : r.mean < 80 ? 'mostly cloudy' : 'overcast'} ` +
+      (Math.round(r.min) === Math.round(r.max) ? `(${Math.round(r.min)} %)` : `(${Math.round(r.min)} to ${Math.round(r.max)} %)`)).join('; ') + '.';
+  } else if (p === 'ADPS') {
+    txt += rows.map(r => `${nameOf(r.id)} down to ${f(r.min)}${r.min < 2 ? ' (dew risk)' : ''}`).join('; ') + '.';
+  } else if (p === 'AWIND') {
+    txt += rows.map(r => `${nameOf(r.id)} up to ${f(r.max)}`).join('; ') + '.';
+  } else if (p === 'ASEEING') {
+    txt += rows.map(r => `${nameOf(r.id)} ${f(r.mean)} on average, best ${f(r.min)}`).join('; ') + '.';
+  } else {
+    txt += rows.map(r => `${nameOf(r.id)} ${f(r.min)} to ${f(r.max)}`).join('; ') + '.';
+  }
+  return txt + ` <span class="muted small">From the ${memberRuns().length > 1 ? 'mean of the ' + runsRangeTxt() : runTxt}.</span>`;
+}
+
+// Health: how many stations in the area reach each category at some hour tomorrow
+function healthTomorrow() {
+  const p = state.poll;
+  if (!FH) return '';
+  const t0 = parseTime(FH.t0_local).getTime(), nowL = new Date(nowLocalMs());
+  const tom = Date.UTC(nowL.getUTCFullYear(), nowL.getUTCMonth(), nowL.getUTCDate() + 1);
+  const i0 = Math.round((tom - t0) / 3600e3), i1 = i0 + 24;
+  if (i0 < 0 || i1 > FH.n) return '<span class="muted small">The latest forecast does not cover tomorrow.</span>';
+  const worst = areaStations().map(s => {
+    const a = arr((FHById[s.id] || {})[p]).slice(i0, i1).filter(isNum);
+    return a.length ? Math.max(...a) : null;
+  }).filter(v => v !== null);
+  if (!worst.length) return '';
+  const n = [0, 1, 2].map(k => worst.filter(v => Math.round(v) === k).length);
+  return `<strong>Tomorrow (forecast, worst hour):</strong> ${n[2]} station${n[2] === 1 ? '' : 's'} high, ${n[1]} moderate, ${n[0]} low.`;
+}
+
+function forecastTomorrow() {
+  if (isHealth(state.poll)) return healthTomorrow();
+  if (isLidar(state.poll)) return lidarTomorrow();
+  if (isAstro(state.poll)) return astroTonight();
+  if (isMet(state.poll)) return metTomorrow();
+  if (!FC) return '';
+  const t0 = parseTime(FC.t0_local).getTime();
+  const nowL = new Date(nowLocalMs());
+  const tom = Date.UTC(nowL.getUTCFullYear(), nowL.getUTCMonth(), nowL.getUTCDate() + 1);
+  const i0 = Math.round((tom - t0) / 3600e3), i1 = i0 + 24;
+  if (i0 < 0 || i1 > FC.n) {
+    return `<span class="muted small">The latest complete forecast (WRF-Chem run of ${fmtTime(parseTime(FC.init_local))}) does not cover tomorrow.</span>`;
+  }
+  const std = POLL.PM25.std;
+  const ids = new Set(areaStations().map(s => s.id));
+  let best = null, n = 0, nHalf = 0, topProb = null, nRuns = 0;
+  const pblMax = [];
+  for (const s of arr(FC.stations)) {
+    if (!ids.has(s.id)) continue;
+    // Daily mean of each run that covers tomorrow (at least 18 of 24 hours)
+    const dm = [];
+    const c = corOf(s.id, 'PM25');
+    for (const m0 of ensMembers(s)) {
+      const v = arr(m0).slice(i0, i1).map(x => applyCor(x, c, 'PM25')).filter(isNum);
+      if (v.length >= 18) dm.push(v.reduce((a, b) => a + b, 0) / v.length);
+    }
+    if (!dm.length) continue;
+    n++;
+    nRuns = Math.max(nRuns, dm.length);
+    const mean = dm.reduce((a, b) => a + b, 0) / dm.length;
+    const above = dm.filter(x => x > std).length;
+    if (above / dm.length >= 0.5) nHalf++;
+    if (!best || mean > best.mean) best = { id: s.id, mean, lo: Math.min(...dm), hi: Math.max(...dm), k: dm.length };
+    if (above && (!topProb || above / dm.length > topProb.p)) topProb = { id: s.id, above, k: dm.length, p: above / dm.length };
+    const pb = arr(s.PBLH).slice(i0, i1).filter(isNum);
+    if (pb.length) pblMax.push(Math.max(...pb));
+  }
+  if (!n) return '';
+  const nameOf = id => { const st = D.stations.find(x => x.id === id); return esc(st ? st.name : id); };
+  const d = new Date(tom);
+  let txt = `<strong>Tomorrow, ${d.getUTCDate()} ${MON[d.getUTCMonth()]}:</strong> daily mean PM2.5 up to ` +
+            `<strong>${Math.round(best.mean)} µg/m³</strong> at ${nameOf(best.id)}`;
+  if (best.k > 1) txt += ` (${Math.round(best.lo)} to ${Math.round(best.hi)} across ${best.k} runs)`;
+  txt += '.';
+  if (nRuns > 1) {
+    if (!topProb) {
+      txt += ` None of the ${nRuns} forecast runs puts any station above the ${std} µg/m³ standard.`;
+    } else {
+      txt += ` At ${nameOf(topProb.id)}, <strong>${topProb.above} of ${topProb.k} runs</strong> are above the ${std} µg/m³ standard`;
+      txt += nHalf > 1 ? `; ${nHalf} stations have at least half the runs above it.` : '.';
+    }
+  } else {
+    txt += best.mean > std ? ` That is above the ${std} µg/m³ standard.` : ` No station is forecast above the ${std} µg/m³ standard.`;
+  }
+  pblMax.sort((a, b) => a - b);
+  if (pblMax.length) {
+    const med = pblMax[Math.floor(pblMax.length / 2)];
+    txt += ` The boundary layer peaks around ${(Math.round(med / 50) * 50).toLocaleString()} m in the afternoon.`;
+  }
+  return txt + ` <span class="muted small">From the ${runsRangeTxt()}${state.cor && COR ? ', corrected with recent observations' : ''}.</span>`;
+}
+
+// Forecast field colours: 5 ug/m3 steps from 0 to 100+, like the NCL forecast plots,
+// so variations at low concentrations stay visible (the AQI bands are kept for stations).
+const FC_SCALE = {          // step per colour (21 colours: 0 to 20 steps and above)
+  PM25: { step: 5,   dec: 0 }, PM10: { step: 10,  dec: 0 }, O3: { step: 5, dec: 0 },
+  CO:   { step: 0.1, dec: 2 }, NO2:  { step: 2.5, dec: 1 }, SO2: { step: 1, dec: 1 },
+  TEMP: { step: 1.5, base: 10, dec: 1 }, RH: { step: 5, dec: 0 }, WIND: { step: 0.5, dec: 1 },
+  RAIN: { step: 1, dec: 1, minShow: 0.1 },     // map: 3-hour totals; below minShow is left clear
+  PBLH: { step: 100, dec: 0, reverse: true },   // shallow PBL (pollution trapped) shown red
+  ACLOUD: { step: 5, dec: 0 }, ADPS: { step: 0.5, dec: 1, reverse: true }, ARH: { step: 5, dec: 0 },
+  AWIND: { step: 0.5, dec: 1 }, ATEMP: { step: 1.5, base: 0, dec: 1 }, APWV: { step: 2.5, dec: 1 },
+  ASEEING: { step: 0.15, dec: 2 }
+};
+const fcScale = p => FC_SCALE[p || state.poll] || FC_SCALE.PM25;
+const fcStep = () => fcScale().step;
+const FC_COLORS = ['#2B2BFF', '#1F49D9', '#1D68B0', '#16827A', '#14A13D', '#3DBB1E', '#78CF1E', '#B2DF20',
+  '#DDEB22', '#FFEE10', '#FFD400', '#FFB800', '#FF9A00', '#FF7A00', '#FF5A00', '#FF3300', '#EE1414', '#CC1238',
+  '#A8105A', '#83106E', '#5E0F80'];
+const FC_RGB = FC_COLORS.map(h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)));
+const fcBinP = (p, v) => {
+  const sc = fcScale(p), n = FC_COLORS.length;
+  const i = Math.min(n - 1, Math.max(0, Math.floor((v - (sc.base || 0)) / sc.step + 1e-9)));
+  return sc.reverse ? n - 1 - i : i;
+};
+const fcBin = v => fcBinP(state.poll, v);
+// Marker / pill colours: the same scale as the forecast map, for every variable
+// USE_AQI_MARKERS is the default for the "Thai AQI colours" checkbox (pollutants only):
+// on = markers, station list, forecast map and colour bars use Thai AQI category colours;
+// off = the continuous scale. A viewer's own choice is remembered in their browser.
+const USE_AQI_MARKERS = false;
+const AQI_PREF_KEY = 'narit-sky-atmosphere:aqi-colours';
+const useAqi = (() => {
+  try { const v = localStorage.getItem(AQI_PREF_KEY); return v === null ? USE_AQI_MARKERS : v === '1'; }
+  catch (e) { return USE_AQI_MARKERS; }
+})();
+state.aqi = useAqi;
+const aqiMode = p => state.aqi && !isCont(p) && !!(POLL[p] && POLL[p].bands);
+const CAT_RGB = CAT.map(c => [1, 3, 5].map(i => parseInt(c.c.slice(i, i + 2), 16)));
+// Radar colour class of a rain amount (mm), so gauge circles match the radar image
+function radarColor(v) {
+  const b = arr(RAD && RAD.bins), c = arr(RAD && RAD.colors);
+  if (!b.length || !isNum(v) || v < b[0]) return { bg: '#FFFFFF', ink: '#1A1A1A' };   // dry gauge
+  let i = 0;
+  while (i + 1 < b.length && v >= b[i + 1]) i++;
+  const rgb = [1, 3, 5].map(k => parseInt(c[i].slice(k, k + 2), 16));
+  return { bg: c[i], ink: (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) > 140 ? '#1A1A1A' : '#FFFFFF' };
+}
+
+function valColor(p, v) {
+  if (isHealth(p)) { const c = hcat(v); return { bg: c.c, ink: c.ink }; }
+  if (state.ovRadar && p === 'RAIN' && RAD) return radarColor(v);
+  if (aqiMode(p)) {
+    const c = CAT[catIdx(p, v)];
+    return { bg: c.c, ink: c.ink };
+  }
+  const i = fcBinP(p, v), c = FC_RGB[i];
+  return { bg: FC_COLORS[i], ink: (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) > 140 ? '#1A1A1A' : '#FFFFFF' };
+}
+function scaleBarHtml(p) {
+  if (isHealth(p)) {
+    return `<div class="bar" style="background:linear-gradient(to right, ${HCAT.map((c, i) => `${c.c} ${i / 3 * 100}% ${(i + 1) / 3 * 100}%`).join(', ')})"></div>` +
+      `<div class="ticks" style="display:grid;grid-template-columns:repeat(3,1fr);text-align:center">${HCAT.map(c => `<span>${c.name}</span>`).join('')}</div>` +
+      `<div class="muted small">${POLL[p].label} risk. ${POLL[p].basis}</div>`;
+  }
+  if (aqiMode(p)) {
+    // Thai AQI categories: five equal segments, each labelled with its range
+    const b = POLL[p].bands, n = CAT.length;
+    const stops = CAT.map((c, i) => `${c.c} ${i / n * 100}% ${(i + 1) / n * 100}%`).join(', ');
+    const labels = [`0 to ${b[0]}`, `${b[0]} to ${b[1]}`, `${b[1]} to ${b[2]}`, `${b[2]} to ${b[3]}`, `above ${b[3]}`];
+    return `<div class="bar" style="background:linear-gradient(to right, ${stops})"></div>` +
+      `<div class="ticks" style="display:grid;grid-template-columns:repeat(${n},1fr);text-align:center">` +
+      labels.map(l => `<span>${l}</span>`).join('') + `</div>` +
+      `<div class="muted small" style="text-align:right">${POLL[p].unit}, Thai AQI categories</div>`;
+  }
+  const cols = fcScale(p).reverse ? FC_COLORS.slice().reverse() : FC_COLORS;
+  const n = cols.length, stops = cols.map((c, i) => `${c} ${i / n * 100}% ${(i + 1) / n * 100}%`).join(', ');
+  const sc = fcScale(p), tick = k => +((sc.base || 0) + k * sc.step).toFixed(2);
+  return `<div class="bar" style="background:linear-gradient(to right, ${stops})"></div>` +
+    `<div class="ticks"><span>${tick(0)}</span><span>${tick(5)}</span><span>${tick(10)}</span><span>${tick(15)}</span>` +
+    `<span>${tick(20)}+ ${POLL[p].unit}</span></div>`;
+}
+const fcFmt = v => isHealth(state.poll) ? hcat(v).name : v.toFixed((FC_SCALE[state.poll] || FC_SCALE.PM25).dec);
+
+function frameValues(i) {
+  const raw = arr(FG.pm25)[i];
+  if (typeof raw !== 'string') return arr(raw);            // older plain-number format
+  const b = atob(raw), out = new Array(b.length);
+  const sc = FG.scale || 1, off = FG.offset || 0;
+  for (let k = 0; k < b.length; k++) { const c = b.charCodeAt(k); out[k] = c === 255 ? null : off + c * sc; }
+  return out;
+}
+
+// ---------- smooth map rendering (shared by WRF-Chem and WACCM) ----------
+// Values are interpolated bilinearly between cell centres and drawn at S x the grid's
+// resolution (rows laid out in Web Mercator); continuous scales blend between neighbouring
+// colours. Thai AQI colours and health categories stay discrete (with smooth boundaries).
+function fieldRgb(p, v) {
+  if (isHealth(p)) return HCAT_RGB[Math.max(0, Math.min(2, Math.round(v)))];
+  if (aqiMode(p)) return CAT_RGB[catIdx(p, v)];
+  const sc = fcScale(p), n = FC_RGB.length;
+  let t = (v - (sc.base || 0)) / sc.step - 0.5;           // colour k sits at the middle of its step
+  t = Math.max(0, Math.min(n - 1, t));
+  const k = Math.floor(t), f = t - k, k1 = Math.min(n - 1, k + 1);
+  const a = FC_RGB[sc.reverse ? n - 1 - k : k], b = FC_RGB[sc.reverse ? n - 1 - k1 : k1];
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+}
+function renderField(G, vals, S, skip) {
+  const p = state.poll, nlat = G.nlat, nlon = G.nlon, minShow = fcScale(p).minShow;
+  const south = G.lat0 - G.dlat / 2, north = G.lat0 + (nlat - 0.5) * G.dlat;
+  const west = G.lon0 - G.dlon / 2, east = G.lon0 + (nlon - 0.5) * G.dlon;
+  const merc = la => Math.log(Math.tan(Math.PI / 4 + la * Math.PI / 360));
+  const yS = merc(south), yN = merc(north);
+  const W = nlon * S, H = nlat * S;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d'), img = ctx.createImageData(W, H);
+  const at = (r, c) => vals[r * nlon + c];
+  for (let r = 0; r < H; r++) {
+    const la = (2 * Math.atan(Math.exp(yN - (r + 0.5) / H * (yN - yS))) - Math.PI / 2) * 180 / Math.PI;
+    const fy = (la - G.lat0) / G.dlat;
+    if (fy < -0.5 || fy > nlat - 0.5) continue;
+    const r0 = Math.max(0, Math.min(nlat - 2, Math.floor(fy))), wy = Math.max(0, Math.min(1, fy - r0));
+    for (let c = 0; c < W; c++) {
+      const lo = west + (c + 0.5) / W * (east - west);
+      if (skip && skip(la, lo)) continue;
+      const fx = (lo - G.lon0) / G.dlon;
+      const c0 = Math.max(0, Math.min(nlon - 2, Math.floor(fx))), wx = Math.max(0, Math.min(1, fx - c0));
+      const a = at(r0, c0), b = at(r0, c0 + 1), d = at(r0 + 1, c0), e = at(r0 + 1, c0 + 1);
+      let v;
+      if (isNum(a) && isNum(b) && isNum(d) && isNum(e)) {
+        v = (a * (1 - wx) + b * wx) * (1 - wy) + (d * (1 - wx) + e * wx) * wy;       // bilinear
+      } else {
+        v = at(Math.max(0, Math.min(nlat - 1, Math.round(fy))), Math.max(0, Math.min(nlon - 1, Math.round(fx))));   // edge: nearest
+      }
+      if (!isNum(v) || (minShow && v < minShow)) continue;
+      const col = fieldRgb(p, v), o = (r * W + c) * 4;
+      img.data[o] = col[0]; img.data[o + 1] = col[1]; img.data[o + 2] = col[2]; img.data[o + 3] = 140;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return { url: cv.toDataURL(), bounds: [[south, west], [north, east]] };
+}
+
+function frameImage(i) {
+  const key = `${state.poll}:${FG.init_local}:${corKey()}:${aqiMode(state.poll) ? 'aqi' : 'cont'}:${i}`;
+  if (fcFrameCache[key]) return fcFrameCache[key];
+  const raw = frameValues(i);
+  const cf = corField(state.poll);
+  const vals = cf ? raw.map((v, k) => (isNum(v) && (cf.B[k] !== 0 || cf.S1[k] !== 0))
+    ? corApply(v, cf.B[k], 1 + cf.S1[k], cf.MF[k], cf.tr) : v) : raw;
+  const im = renderField(FG, vals, 3, null);
+  return (fcFrameCache[key] = { url: im.url, bounds: im.bounds, vals, raw });
+}
+
+// WACCM fill: drawn under the WRF-Chem field, only where WRF-Chem has no value (outside its
+// domain). Same frame times as WRF-Chem (extractWRFForecast.m interpolates WACCM to them),
+// same colours; not corrected with the station observations.
+const waccmOn = () => state.waccm && WG && FG && !isHealth(state.poll);
+const waccmFrameCache = {};
+function waccmDecoded(j) {
+  const key = `${WG.init_local}:${WG.pollutant}:${j}`;
+  if (waccmFrameCache[key]) return waccmFrameCache[key];
+  const raw = arr(WG.pm25)[j];
+  if (typeof raw !== 'string') return null;
+  const b = atob(raw), sc = WG.scale || 1, off = WG.offset || 0, out = new Array(b.length);
+  for (let k = 0; k < b.length; k++) { const c = b.charCodeAt(k); out[k] = c === 255 ? null : off + c * sc; }
+  return (waccmFrameCache[key] = out);
+}
+// WACCM field at the time of WRF-Chem frame i: linear in time between WACCM's 6-hourly frames
+function waccmValues(i) {
+  const t = parseTime(arr(FG.times_local)[i]);
+  const tw = arr(WG.times_local).map(x => { const d = parseTime(x); return d ? d.getTime() : null; });
+  if (!t || !tw.length) return null;
+  const tt = t.getTime();
+  let j = -1;
+  for (let k = 0; k < tw.length; k++) if (tw[k] !== null && tw[k] <= tt) j = k;
+  if (j === -1) return null;
+  if (tw[j] === tt || j === tw.length - 1) return tw[j] === tt ? waccmDecoded(j) : null;
+  const a = waccmDecoded(j), b = waccmDecoded(j + 1);
+  if (!a || !b) return null;
+  const w = (tt - tw[j]) / (tw[j + 1] - tw[j]);
+  return a.map((v, k) => (isNum(v) && isNum(b[k])) ? v + (b[k] - v) * w : null);
+}
+function waccmImage(i) {
+  const key = `${state.poll}:${WG.init_local}:${FG.init_local}:${aqiMode(state.poll) ? 'aqi' : 'cont'}:${i}`;
+  if (waccmCache[key] !== undefined) return waccmCache[key];
+  const wv = waccmValues(i);
+  if (!wv || !wv.some(isNum)) return (waccmCache[key] = null);
+  const fv = frameValues(i);                              // WRF-Chem values: WACCM only where they are missing
+  const skip = (la, lo) => {
+    const fr = Math.round((la - FG.lat0) / FG.dlat), fc = Math.round((lo - FG.lon0) / FG.dlon);
+    return fr >= 0 && fr < FG.nlat && fc >= 0 && fc < FG.nlon && isNum(fv[fr * FG.nlon + fc]);
+  };
+  const im = renderField(WG, wv, 4, skip);
+  return (waccmCache[key] = { url: im.url, bounds: im.bounds, vals: wv });
+}
+function renderWaccm() {
+  const im = (state.fcOn && FG && state.frame !== null && waccmOn()) ? waccmImage(state.frame) : null;
+  if (!im) { if (waccmOverlay) { map.removeLayer(waccmOverlay); waccmOverlay = null; } return; }
+  if (!waccmOverlay) waccmOverlay = L.imageOverlay(im.url, im.bounds, { pane: 'waccm', interactive: false, className: 'fc-img' }).addTo(map);
+  else { waccmOverlay.setUrl(im.url); waccmOverlay.setBounds(L.latLngBounds(im.bounds)); }
+  waccmOverlay.setOpacity(state.ovSat ? 0.75 : 1);
+}
+// WACCM value at a point, where WRF-Chem has none
+function waccmValueAt(lat, lon) {
+  if (!waccmOn() || state.frame === null) return null;
+  const ri = Math.round((lat - WG.lat0) / WG.dlat), ci = Math.round((lon - WG.lon0) / WG.dlon);
+  if (ri < 0 || ri >= WG.nlat || ci < 0 || ci >= WG.nlon) return null;
+  const im = waccmImage(state.frame);
+  const v = im ? im.vals[ri * WG.nlon + ci] : null;
+  return isNum(v) ? v : null;
+}
+
+function fcValueAt(lat, lon) {
+  if (!FG || state.frame === null) return null;
+  const ri = Math.round((lat - FG.lat0) / FG.dlat), ci = Math.round((lon - FG.lon0) / FG.dlon);
+  if (ri < 0 || ri >= FG.nlat || ci < 0 || ci >= FG.nlon) return null;
+  const im = frameImage(state.frame), k = ri * FG.nlon + ci;
+  return isNum(im.vals[k]) ? { v: im.vals[k], raw: im.raw[k] } : null;
+}
+
+function defaultFrame() {
+  const times = arr(FG.times_local).map(parseTime);
+  const now = nowLocalMs();
+  const i = times.findIndex(t => t && t.getTime() >= now - 1.5 * 3600e3);
+  return i === -1 ? times.length - 1 : i;
+}
+
+// Which runs the map shows: the ensemble mean when the grid file carries several members
+function gridSource() {
+  const runs = arr(FG.members_init_local).map(parseTime).filter(Boolean).sort((a, b) => a - b);
+  if (FG.n_members > 1 && runs.length > 1) {
+    const f = d => `${d.getUTCDate()} ${MON[d.getUTCMonth()]}`;
+    return `mean of ${FG.n_members} WRF-Chem runs (${f(runs[0])} to ${f(runs[runs.length - 1])})`;
+  }
+  return `WRF-Chem run of ${fmtTime(parseTime(FG.init_local))}`;
+}
+
+// ---------- shared timeline: forecast + overlays ----------
+// One timeline runs over everything shown: forecast frames (every 3 h, including the
+// recent past) and the radar / satellite frames of the last 3 hours. At each time, every
+// layer shows its nearest frame, or nothing if it has no frame close enough.
+const TOL_MS = { fc: 1.5 * 3600e3, sat: 6 * 60e3, radar: 9 * 60e3 };
+const fcTimesMs = () => (FG && state.fcOn) ? arr(FG.times_local).map(parseTime).filter(Boolean).map(d => d.getTime()) : [];
+const satTimesMs = () => state.ovSat ? state.satTimes.map(d => d.getTime() + 7 * 3600e3) : [];
+// Radar frames on the timeline: the observed frames, then the 2-hour nowcast made from the newest one
+function radarFrames() {
+  if (!RAD) return [];
+  const nc = RAD.nowcast && !Array.isArray(RAD.nowcast) ? arr(RAD.nowcast.frames).map(f => Object.assign({ nowcast: true }, f)) : [];
+  return [...arr(RAD.frames), ...nc];
+}
+const radarTimesMs = () => (state.ovRadar && RAD) ? radarFrames().map(f => parseTime(f.time_local)).filter(Boolean).map(d => d.getTime()) : [];
+const compass = deg => ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'][Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+function nearestIdx(list, t, tol) {
+  let best = -1, bd = Infinity;
+  list.forEach((v, i) => { const d = Math.abs(v - t); if (d < bd) { bd = d; best = i; } });
+  return bd <= tol ? best : -1;
+}
+function defaultTimeIdx(tl) {
+  const now = nowLocalMs();
+  const obs = [...satTimesMs(), ...radarTimesMs()].filter(v => v <= now + 60e3);
+  if (obs.length) return nearestIdx(tl, Math.max(...obs), Infinity);      // newest observation
+  const i = tl.findIndex(v => v >= now - 1.5 * 3600e3);                   // forecast for about now
+  return i === -1 ? tl.length - 1 : i;
+}
+function rebuildTimeline() {
+  const prev = state.timeline.length ? state.timeline[Math.min(state.tIdx, state.timeline.length - 1)] : null;
+  const all = [...fcTimesMs(), ...satTimesMs(), ...radarTimesMs()].map(v => Math.round(v / 60e3) * 60e3);
+  const tl = [...new Set(all)].sort((a, b) => a - b);
+  state.timeline = tl;
+  if (!tl.length) state.tIdx = 0;
+  else if (prev !== null && !state.tlReset) state.tIdx = nearestIdx(tl, prev, Infinity);
+  else state.tIdx = defaultTimeIdx(tl);
+  state.tlReset = false;
+}
+function syncFrames() {
+  const t = state.timeline[state.tIdx];
+  if (t === undefined) { state.frame = null; state.satIdx = -1; state.radIdx = -1; return; }
+  const fi = nearestIdx(fcTimesMs(), t, TOL_MS.fc);
+  state.frame = fi === -1 ? null : fi;
+  state.satIdx = state.ovSat ? nearestIdx(satTimesMs(), t, TOL_MS.sat) : -1;
+  state.radIdx = state.ovRadar ? nearestIdx(radarTimesMs(), t, TOL_MS.radar) : -1;
+}
+
+function renderForecastControls() {
+  $('#fcControls').hidden = !FC && !FG;
+  rebuildTimeline();
+  syncFrames();
+  const tl = state.timeline, n = tl.length;
+  const fcShown = !!FG && state.fcOn && state.frame !== null;
+
+  // Legends, stacked: forecast field, radar, satellite
+  const parts = [];
+  if (fcShown) parts.push(scaleBarHtml(state.poll).replace(' mm/h</span>', ' mm per 3 h</span>'));
+  if (state.ovRadar && RAD) parts.push(radarLegendHtml());
+  if (state.ovSat) parts.push(satLegendHtml(state.ovSat));
+  $('#legendBox').hidden = !parts.length;
+  $('#fcBar').innerHTML = parts.join('<div style="height:10px"></div>');
+
+  $('#timeBar').hidden = !n;
+  if (!n) {
+    stopPlay();
+    $('#fcCursor').textContent = '';
+    $('#fcLabel').innerHTML = FG || !FC ? '' : `<span class="muted small">${state.poll === 'ASEEING'
+      ? 'Seeing is forecast at the observatories only (it needs full vertical profiles); see the station chart.'
+      : 'No forecast map available for ' + POLL[state.poll].label + '.'}</span>`;
+    return;
+  }
+  const sl = $('#fcSlider');
+  sl.max = String(n - 1);
+  sl.value = String(state.tIdx);
+  const tv = tl[state.tIdx], t = new Date(tv);
+  const what = [];
+  if (fcShown) what.push(state.poll === 'RAIN' ? 'rain forecast (3 h)' : `${POLL[state.poll].label} forecast`);
+  if (state.radIdx >= 0) what.push(radarFrames()[state.radIdx].nowcast ? 'radar nowcast' : 'radar');
+  if (state.satIdx >= 0) what.push(SAT[state.ovSat].label.toLowerCase());
+  $('#tbTime').textContent = `${WDN[t.getUTCDay()]} ${fmtTime(t)} · ` + (what.length ? what.join(' + ') : 'no layer has data at this time');
+  const dm = Math.round((tv - nowLocalMs()) / 60e3), dh = Math.round(dm / 60);
+  $('#tbSub').textContent = Math.abs(dm) < 15 ? 'now' : dm > 0 ? (dm < 90 ? `in ${dm} min` : `in ${dh} h`) : (-dm < 90 ? `${-dm} min ago` : `${-dh} h ago`);
+
+  // Ticks: days for a long timeline, hours for a short one
+  const key = `${tl[0]}:${tl[n - 1]}:${n}`;
+  const days = $('#tbDays');
+  if (days.dataset.key !== key) {
+    const byDay = tl[n - 1] - tl[0] > 36 * 3600e3;
+    let last = '';
+    days.innerHTML = n < 2 ? '' : tl.map((v, i) => {
+      const d = new Date(v);
+      const lab = byDay ? `${WDN[d.getUTCDay()]} ${d.getUTCDate()}` : `${pad(d.getUTCHours())}:00`;
+      if (lab === last) return '';
+      last = lab;
+      return `<span style="left:${(i / (n - 1) * 100).toFixed(2)}%">${lab}</span>`;
+    }).join('');
+    days.dataset.key = key;
+  }
+
+  // What each layer shows at this time
+  const lines = [];
+  if (FG && state.fcOn) lines.push(fcShown
+    ? `${state.poll === 'RAIN' ? 'Rain forecast, 3 hours to' : POLL[state.poll].label + ' forecast for'} <strong>${fmtTime(new Date(fcTimesMs()[state.frame]))}</strong>. ` +
+      `<span class="muted small">${gridSource()}${corField(state.poll) ? ', corrected within about ' + (COR.map_radius_km || 40) * 2 + ' km of stations' : ''}.` +
+      `${waccmOn() ? ' Outside the WRF-Chem domain: NCAR WACCM global forecast (about 100 km, not corrected), matched to the same times.' : ''}` +
+      `${state.hideObs ? '' : ' Station circles stay observed values.'} Click the map for the forecast at any point.</span>`
+    : `<span class="muted small">No ${POLL[state.poll].label} forecast frame near this time.</span>`);
+  if (state.ovRadar && RAD) {
+    const rf = state.radIdx >= 0 ? radarFrames()[state.radIdx] : null, nc = RAD.nowcast;
+    lines.push(`<span class="muted small">${!rf ? 'Radar: no frame at this time (last 3 hours and 2-hour nowcast only).'
+      : rf.nowcast ? `Radar nowcast, +${rf.lead_min} min from the ${fmtTime(parseTime(nc.base_time_local))} radar frame: rain moved along its recent motion` +
+        (isNum(nc.speed_kmh) ? ` (${Math.round(nc.speed_kmh)} km/h towards ${compass(nc.direction_to_deg)})` : '') + ', without growth or decay.'
+      : `Radar (TMD composite): ${fmtTime(parseTime(rf.time_local))}.`}</span>`);
+  }
+  if (state.ovSat) lines.push(`<span class="muted small">${SAT[state.ovSat].label}: ${state.satIdx >= 0
+    ? fmtTime(new Date(satTimesMs()[state.satIdx])) : 'no image at this time (last 3 hours only)'}. ${SAT[state.ovSat].note}</span>`);
+  $('#fcLabel').innerHTML = lines.join('<br>');
+}
+
+// ---------- satellite: Himawari via NASA GIBS (tiles loaded directly by the browser) ----------
+// GIBS serves the JMA Himawari imagery every 10 min as Web Mercator tiles; no server work needed.
+const SAT = {
+  ir:  { label: 'Clouds (infrared)', layer: 'Himawari_AHI_Band13_Clean_Infrared', matrix: 'GoogleMapsCompatible_Level6', native: 6,
+         note: 'Grey = warm, low; green → yellow → red = higher, colder cloud tops. Day and night.' },
+  vis: { label: 'Clouds (visible)', layer: 'Himawari_AHI_Band3_Red_Visible_1km', matrix: 'GoogleMapsCompatible_Level7', native: 7,
+         note: 'What the eye would see; dark at night.' },
+  air: { label: 'Air mass (RGB)', layer: 'Himawari_AHI_Air_Mass', matrix: 'GoogleMapsCompatible_Level6', native: 6,
+         note: 'Red = dry upper air; green = warm, moist air; purple-blue = cold air; white = thick high cloud.' }
+};
+// Radar: TMD nationwide composite (rain rate), images made by downloadTMDRadarComposite.m
+let RAD = null;                                    // dashboard_data/radar.json
+const RAD_URL = 'dashboard_data/radar.json', RAD_OPACITY = 0.8;
+const SAT_STEP_MIN = 10, SAT_FRAMES = 18, SAT_LAG_MIN = 40;   // last 3 h, newest ~40 min old (GIBS latency)
+const SAT_OPACITY = 0.55;                                       // lets the base map show through
+const WDN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+function satTimes() {
+  const step = SAT_STEP_MIN * 60e3;
+  const end = Math.floor((Date.now() - SAT_LAG_MIN * 60e3) / step) * step;
+  return Array.from({ length: SAT_FRAMES }, (_, i) => new Date(end - (SAT_FRAMES - 1 - i) * step));
+}
+const satUrl = (sv, d) => `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${sv.layer}/default/` +
+  `${d.toISOString().slice(0, 19)}Z/${sv.matrix}/{z}/{y}/{x}.png`;
+
+// Overlays: one layer per frame, all loaded once, so moving in time is instant
+let satLayers = [], satKey = '', radLayers = [], radKey = '';
+function renderSatellite() {
+  const sv = state.ovSat ? SAT[state.ovSat] : null, st = state.satTimes, n = st.length;
+  const key = sv && n ? `${state.ovSat}:${st[0].getTime()}:${st[n - 1].getTime()}` : '';
+  if (key !== satKey) {
+    satLayers.forEach(l => map.removeLayer(l));
+    satLayers = key ? st.map(d => L.tileLayer(satUrl(sv, d), {
+      pane: 'sat', opacity: 0, maxNativeZoom: sv.native, maxZoom: 18,
+      attribution: 'Himawari imagery: JMA, via NASA GIBS'
+    }).addTo(map)) : [];
+    satKey = key;
+  }
+  satLayers.forEach((l, i) => l.setOpacity(i === state.satIdx ? SAT_OPACITY : 0));
+
+  const fr = (state.ovRadar && RAD) ? radarFrames() : [];
+  const rk = fr.map(f => f.image).join('|');
+  if (rk !== radKey) {
+    radLayers.forEach(l => map.removeLayer(l));
+    radLayers = fr.map(f => L.imageOverlay(f.image, RAD.bounds, {
+      pane: 'radar', opacity: 0, interactive: false, attribution: 'Radar: Thai Meteorological Department'
+    }).addTo(map));
+    radKey = rk;
+  }
+  radLayers.forEach((l, i) => l.setOpacity(i === state.radIdx ? RAD_OPACITY : 0));
+}
+
+// Checkbox label names the layer it shows or hides
+function renderShowFcLabel() {
+  $('#showFcText').textContent = `Show ${POLL[state.poll] ? POLL[state.poll].label : ''} forecast on the map`;
+}
+
+function radarLegendHtml() {
+  const b = arr(RAD.bins), c = arr(RAD.colors), n = c.length;
+  const stops = c.map((col, i) => `${col} ${i / n * 100}% ${(i + 1) / n * 100}%`).join(', ');
+  return `<div class="bar" style="background:linear-gradient(to right, ${stops})"></div>` +
+    `<div class="ticks" style="display:grid;grid-template-columns:repeat(${n},1fr);text-align:center">` +
+    b.map((v, i) => `<span>${i % 2 === 0 || i === n - 1 ? v + (i === n - 1 ? '+' : '') : ''}</span>`).join('') + `</div>` +
+    `<div class="muted small" style="text-align:right">radar rain rate, mm/h</div>`;
+}
+
+// Satellite legends: NASA publishes these layers as plain images (no colour scale or
+// colour-map file), so the legends explain how to read them instead of giving numbers.
+function satLegendHtml(key) {
+  const sw = (c, t) => `<span style="display:inline-flex;align-items:center;gap:5px;margin:2px 10px 2px 0">` +
+    `<span style="width:12px;height:12px;border-radius:2px;border:1px solid var(--line);background:${c}"></span>${t}</span>`;
+  // GIBS draws this layer with a colour enhancement (grey for warm, then green, yellow, red,
+  // dark for the coldest tops); the exact temperature for each colour is not published.
+  if (key === 'ir') return `<div class="bar" style="background:linear-gradient(to right,` +
+    `#4A4A4A 0%,#B8B8B8 32%,#5DBB4A 45%,#E8E23A 58%,#F08A24 70%,#D7261E 84%,#5A1010 100%)"></div>` +
+    `<div class="ticks"><span>warmer: ground, sea, low cloud</span><span>colder: higher cloud</span><span>coldest: storm tops</span></div>` +
+    `<div class="muted small">Grey = clear sky or low, warm cloud. Green → yellow → red = ever higher, colder cloud tops; ` +
+    `dark red cores are the tallest thunderstorms. NASA does not publish the temperature of each colour, so read it as an order, not exact values.</div>`;
+  if (key === 'vis') return `<div class="bar" style="background:linear-gradient(to right,#111,#777,#fff)"></div>` +
+    `<div class="ticks"><span>clear land or sea</span><span>thick cloud</span></div>` +
+    `<div class="muted small">Sunlight reflected by clouds, as the eye would see it; dark at night.</div>`;
+  return `<div style="font-size:0.78rem">` +
+    sw('#F2F2F2', 'thick high cloud') + sw('#C9A34C', 'mid-level cloud') + sw('#C8382E', 'dry, descending upper air (jet stream)') +
+    sw('#3C9A3C', 'warm, moist air') + sw('#5B4FC2', 'cold air') + `</div>` +
+    `<div class="muted small">Standard air-mass RGB colours (EUMETSAT convention).</div>`;
+}
+
+// Rain-rate class under a point: sample the frame's image (same origin) and match its colour
+const radarCanvas = {};
+function radarClassAt(lat, lon) {
+  if (!RAD || !state.ovRadar || state.radIdx < 0) return null;
+  const f = radarFrames()[state.radIdx];
+  if (!f) return null;
+  let cv = radarCanvas[f.image];
+  if (!cv) {
+    const img = new Image();
+    cv = radarCanvas[f.image] = { img, ctx: null };
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      cv.ctx = c.getContext('2d', { willReadFrequently: true });
+      cv.ctx.drawImage(img, 0, 0);
+    };
+    img.src = f.image;
+    return null;                                    // ready on the next move
+  }
+  if (!cv.ctx) return null;
+  const [[s0, w0], [n0, e0]] = RAD.bounds;
+  if (lat < s0 || lat > n0 || lon < w0 || lon > e0) return null;
+  const merc = la => Math.log(Math.tan(Math.PI / 4 + la * Math.PI / 360));
+  const W = cv.ctx.canvas.width, H = cv.ctx.canvas.height;
+  const x = Math.min(W - 1, Math.floor((lon - w0) / (e0 - w0) * W));
+  const y = Math.min(H - 1, Math.floor((merc(n0) - merc(lat)) / (merc(n0) - merc(s0)) * H));
+  const px = cv.ctx.getImageData(x, y, 1, 1).data;
+  if (px[3] < 10) return { text: 'no rain detected' };
+  const cols = arr(RAD.colors).map(h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16)));
+  let best = 0, bd = Infinity;
+  cols.forEach((c, i) => { const d = (c[0] - px[0]) ** 2 + (c[1] - px[1]) ** 2 + (c[2] - px[2]) ** 2; if (d < bd) { bd = d; best = i; } });
+  const b = arr(RAD.bins);
+  return { text: best === b.length - 1 ? `${b[best]}+ mm/h` : `${b[best]} to ${b[best + 1]} mm/h` };
+}
+
+// Turn an overlay on or off. Satellite views replace each other; radar combines with any.
+function toggleOverlay(kind) {
+  stopPlay();
+  state.tlReset = true;                         // jump to the newest observation / about now
+  if (kind === 'radar') {
+    state.ovRadar = !state.ovRadar;
+    // Radar on: show the TMD rain gauges as the stations, to compare with the radar
+    const sel = $('#poll');
+    if (state.ovRadar && state.poll !== 'RAIN' && sel.querySelector('option[value="RAIN"]')) {
+      sel.value = 'RAIN';
+      sel.dispatchEvent(new Event('change'));   // loads the rain data and redraws everything
+      return;
+    }
+  } else {
+    state.ovSat = state.ovSat === kind ? null : kind;
+    if (state.ovSat) state.satTimes = satTimes();
+  }
+  renderLayerList(); renderForecastControls(); renderForecastMap(); renderSatellite();
+  if (D) { renderStations(); renderList(); renderLegend(); }
+}
+
+// ---------- play button ----------
+let playTimer = null;
+function stopPlay() {
+  if (playTimer) { clearInterval(playTimer); playTimer = null; }
+  const b = $('#playBtn');
+  b.innerHTML = '&#x25B6;'; b.setAttribute('aria-label', 'Play the forecast'); b.title = 'Play';
+}
+function togglePlay() {
+  if (playTimer) { stopPlay(); return; }
+  if (!state.timeline.length) return;
+  const b = $('#playBtn');
+  b.innerHTML = '&#x275A;&#x275A;'; b.setAttribute('aria-label', 'Pause'); b.title = 'Pause';
+  playTimer = setInterval(() => {
+    if (!state.timeline.length) return;
+    state.tIdx = (state.tIdx + 1) % state.timeline.length;
+    renderForecastControls(); renderForecastMap(); renderSatellite();
+  }, reducedMotion ? 1500 : 600);
+}
+
+// ---------- layer picker (mirrors the "Show" menu) ----------
+function renderLayerList() {
+  const sel = $('#poll');
+  let html = '';
+  for (const g of sel.querySelectorAll('optgroup')) {
+    html += `<div class="lyr-group">${esc(g.label)}</div>`;
+    for (const o of g.querySelectorAll('option')) {
+      html += `<button type="button" class="lyr" data-p="${o.value}" aria-pressed="${o.value === state.poll}">${esc(o.textContent)}</button>`;
+    }
+  }
+  // Overlays: on top of the layer chosen above, in any combination (one satellite view at a time)
+  html += `<div class="lyr-group">Overlays</div>`;
+  if (RAD && arr(RAD.frames).length) html +=
+    `<button type="button" class="lyr ov" data-ov="radar" aria-pressed="${state.ovRadar}">Radar rain rate</button>`;
+  html += Object.keys(SAT).map(k =>
+    `<button type="button" class="lyr ov" data-ov="${k}" aria-pressed="${state.ovSat === k}">Satellite: ${esc(SAT[k].label)}</button>`).join('');
+  $('#layerList').innerHTML = html;
+}
+
+// ---------- forecast at a clicked point ----------
+function cellSeries(lat, lon) {
+  if (!FG) return null;
+  const ri = Math.round((lat - FG.lat0) / FG.dlat), ci = Math.round((lon - FG.lon0) / FG.dlon);
+  if (ri < 0 || ri >= FG.nlat || ci < 0 || ci >= FG.nlon) return null;
+  const k = ri * FG.nlon + ci, sc = FG.scale || 1, off = FG.offset || 0;
+  const cf = corField(state.poll);
+  const fixCell = v => (cf && (cf.B[k] !== 0 || cf.S1[k] !== 0)) ? corApply(v, cf.B[k], 1 + cf.S1[k], cf.MF[k], cf.tr) : v;
+  return arr(FG.pm25).map(fr => {
+    if (typeof fr !== 'string') { const v = arr(fr)[k]; return isNum(v) ? fixCell(v) : null; }
+    const c = atob(fr).charCodeAt(k);
+    return c === 255 ? null : fixCell(off + c * sc);
+  });
+}
+function sparkSvg(vals, cur, w = 230, h = 64) {
+  const good = vals.filter(isNum);
+  if (good.length < 2) return '';
+  let lo = Math.min(...good), hi = Math.max(...good);
+  if (hi - lo < 1e-9) { hi += 1; lo -= 1; }
+  const n = vals.length, X = i => 4 + i / (n - 1) * (w - 8), Y = v => h - 6 - (v - lo) / (hi - lo) * (h - 14);
+  let d = '', pen = false;
+  vals.forEach((v, i) => { if (isNum(v)) { d += `${pen ? 'L' : 'M'}${X(i).toFixed(1)},${Y(v).toFixed(1)}`; pen = true; } else pen = false; });
+  const css = getComputedStyle(document.documentElement), fc = css.getPropertyValue('--fc').trim(), mu = css.getPropertyValue('--muted').trim();
+  const cv = vals[cur];
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Forecast over the next days">` +
+    `<line x1="${X(cur)}" x2="${X(cur)}" y1="2" y2="${h - 2}" stroke="${mu}" stroke-dasharray="2 3"/>` +
+    `<path d="${d}" fill="none" stroke="${fc}" stroke-width="1.8"/>` +
+    (isNum(cv) ? `<circle cx="${X(cur)}" cy="${Y(cv)}" r="3.5" fill="${fc}"/>` : '') + `</svg>`;
+}
+function pointPopup(e) {
+  const r = state.ovRadar ? radarClassAt(e.latlng.lat, e.latlng.lng) : null;
+  const rf = r ? radarFrames()[state.radIdx] : null;
+  const radLine = rf ? `<div class="muted">${rf.nowcast ? 'Radar nowcast' : 'Radar'}, ${fmtTime(parseTime(rf.time_local))}: <strong>${r.text}</strong></div>` : '';
+  const fcShown = state.fcOn && FG && state.frame !== null;
+  const vals = fcShown ? cellSeries(e.latlng.lat, e.latlng.lng) : null;
+  if (!vals || !vals.some(isNum)) {
+    if (radLine) L.popup({ maxWidth: 260 }).setLatLng(e.latlng).setContent(
+      `<div class="pt-pop"><div class="muted">${e.latlng.lat.toFixed(2)}°N ${e.latlng.lng.toFixed(2)}°E</div>${radLine}</div>`).openOn(map);
+    return;
+  }
+  const p = state.poll, u = p === 'RAIN' ? 'mm in 3 h' : POLL[p].unit;
+  const times = arr(FG.times_local), cur = state.frame, v = vals[cur];
+  const good = vals.filter(isNum);
+  const t0 = parseTime(times[0]), t1 = parseTime(times[times.length - 1]);
+  const html = `<div class="pt-pop"><div class="muted">${POLL[p].label} forecast, ${e.latlng.lat.toFixed(2)}°N ${e.latlng.lng.toFixed(2)}°E</div>` +
+    `<div><span class="big">${isNum(v) ? fcFmt(v) : '–'}</span> ${u} at ${fmtTime(parseTime(times[cur]))}</div>` +
+    sparkSvg(vals, cur) +
+    `<div class="muted">${fmtTime(t0)} to ${fmtTime(t1)}: ${fcFmt(Math.min(...good))} to ${fcFmt(Math.max(...good))} ${u}</div>${radLine}</div>`;
+  L.popup({ maxWidth: 280 }).setLatLng(e.latlng).setContent(html).openOn(map);
+}
+
+function renderForecastMap() {
+  if (!FG || !state.fcOn || state.frame === null) {
+    if (fcOverlay) { map.removeLayer(fcOverlay); fcOverlay = null; }
+    renderWaccm();
+    return;
+  }
+  const im = frameImage(state.frame);
+  if (!fcOverlay) {
+    fcOverlay = L.imageOverlay(im.url, im.bounds, { pane: 'fcst', interactive: false, className: 'fc-img' }).addTo(map);
+  } else {
+    fcOverlay.setUrl(im.url);
+    fcOverlay.setBounds(L.latLngBounds(im.bounds));
+  }
+  fcOverlay.setOpacity(state.ovSat ? 0.75 : 1);     // let the satellite image show through
+  renderWaccm();
+}
+
+function renderOutlook() {
+  const H = arr(D.haze);
+  if (!H.length) {
+    $('#outlook').innerHTML = '<p class="muted small">No haze tracker log found. Set cfg.hazeLogFile in exportDashboardData.m to the log written by haze_season_tracker_SEAsia.m.</p>';
+    return;
+  }
+  const r = H[H.length - 1];
+  const sign = (v, d) => isNum(v) ? (v > 0 ? '+' : '') + v.toFixed(d) : 'n/a';
+  const rows = [
+    ['El Niño index (ONI)', `${sign(r.oni_anomaly_C, 2)} °C${r.oni_month ? ' (' + esc(r.oni_month) + ')' : ''}`],
+    ['Rainfall vs normal, last 30 days', `${sign(r.precip_anomaly_pct, 0)} %`],
+    [`Fire detections, Southeast Asia, last ${isNum(r.fire_window_days) ? r.fire_window_days : 7} days`, isNum(r.fire_count) ? r.fire_count.toLocaleString() : 'n/a'],
+    ['Northern stations, mean PM2.5', isNum(r.air4thai_mean_pm25) ? Math.round(r.air4thai_mean_pm25) + ' µg/m³' : 'n/a']
+  ];
+  $('#outlook').innerHTML =
+    `<dl class="outlook">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>` +
+    [r.plain_language1, r.plain_language2].filter(Boolean).map(t => `<p class="note">${esc(t)}</p>`).join('') +
+    [r.campaign_note1, r.campaign_note2].filter(Boolean).map(t => `<p class="note muted small">${esc(t)}</p>`).join('') +
+    staleNote(r.run_date);
+}
+
+function staleNote(runDate) {
+  const d = parseTime((runDate || '') + ' 00:00');
+  if (!d) return `<p class="note muted small">From the haze season tracker, run ${esc(runDate)}.</p>`;
+  const nowLocal = Date.now() + 7 * 3600e3;
+  const age = Math.floor((nowLocal - d.getTime()) / 86400e3);
+  const when = `${d.getUTCDate()} ${MON[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+  const ago = age <= 0 ? 'today' : age === 1 ? 'yesterday' : `${age} days ago`;
+  if (age > 8) {
+    return `<p class="note small"><strong>Last updated ${when} (${ago}).</strong> Run haze_season_tracker_SEAsia.m to refresh these numbers.</p>`;
+  }
+  return `<p class="note muted small">From the haze season tracker, run ${when} (${ago}).</p>`;
+}
+
+function renderAqiToggle() {
+  const p = state.poll;
+  $('#aqiToggle').hidden = isCont(p) || !(POLL[p] && POLL[p].bands);
+  $('#useAqi').checked = state.aqi;
+}
+
+function renderMe() {
+  if (meLayer) { map.removeLayer(meLayer); meLayer = null; }
+  if (!state.me) return;
+  const { lat, lon, acc } = state.me;
+  meLayer = L.layerGroup([
+    L.circle([lat, lon], { radius: Math.min(acc || 0, 5000), color: '#1A73E8', weight: 1, fillOpacity: 0.08, interactive: false }),
+    L.marker([lat, lon], { icon: L.divIcon({ className: 'stn-wrap', html: '<div class="me-dot"></div>', iconSize: [14, 14] }),
+                           zIndexOffset: 10000, keyboard: false })
+      .bindTooltip(`You are here${acc ? ` (within about ${acc < 1000 ? Math.round(acc) + ' m' : (acc / 1000).toFixed(1) + ' km'})` : ''}`,
+                   { direction: 'top', offset: [0, -8] })
+  ]).addTo(map);
+}
+
+function requestLocation() {
+  const btn = $('#locBtn'), note = $('#locNote');
+  if (state.me) {                       // second click: stop using the location
+    state.me = null;
+    state.sort = 'value';
+    btn.textContent = 'Use my location';
+    btn.setAttribute('aria-pressed', 'false');
+    $('#sortWrap').hidden = true;
+    $('#sortBy').value = 'value';
+    note.textContent = 'Your location is used only in this browser, to show where you are and how far each station is. It is not sent or stored anywhere.';
+    renderMe(); renderStations(); renderList();
+    return;
+  }
+  if (!navigator.geolocation) { note.textContent = 'This browser cannot share its location.'; return; }
+  btn.textContent = 'Finding you…';
+  navigator.geolocation.getCurrentPosition(pos => {
+    state.me = { lat: pos.coords.latitude, lon: pos.coords.longitude, acc: pos.coords.accuracy };
+    state.sort = 'dist';
+    btn.textContent = 'Stop using my location';
+    btn.setAttribute('aria-pressed', 'true');
+    $('#sortWrap').hidden = false;
+    $('#sortBy').value = 'dist';
+    note.textContent = 'Location in use, only in this browser. Stations are sorted by distance from you.';
+    if (D && !state.userPicked) { selectTopStation(); renderChart(); }
+    renderMe(); renderStations(); renderList();
+    map.setView([state.me.lat, state.me.lon], Math.max(map.getZoom(), 9), { animate: !reducedMotion });
+  }, err => {
+    btn.textContent = 'Use my location';
+    note.textContent = err.code === err.PERMISSION_DENIED
+      ? 'Location not shared. You can allow it later in the browser\'s site settings.'
+      : 'Your location could not be found right now. Please try again.';
+  }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 });
+}
+
+// ---------- data status ----------
+// Each feed: newest time (local ms, "local-as-UTC" like the rest of the page) and the
+// ages (hours) at which it counts as late / stale. Station feeds are hourly values in
+// files exported once an hour, so up to ~2 h is their normal age (PCD's hourly archive
+// adds ~2 h more); the radar writes its own file every 10 min.
+function feedStatus() {
+  const latest = (list, key) => {
+    let m = null;
+    for (const s of arr(list)) { const t = parseTime(s[key]); if (t && (m === null || t > m)) m = t.getTime(); }
+    return m;
+  };
+  const utcToLoc = str => { const t = parseTime(str); return t ? t.getTime() + 7 * 3600e3 : null; };
+  const firmsNewest = (() => {
+    let m = null;
+    for (const t of arr(D && D.hotspots && D.hotspots.t)) { const v = utcToLoc(t); if (v !== null && (m === null || v > m)) m = v; }
+    return m;
+  })();
+  const radNewest = RAD ? (arr(RAD.frames).map(f => parseTime(f.time_local)).filter(Boolean).map(t => t.getTime()).sort((a, b) => b - a)[0] ?? null) : null;
+  return [
+    { name: 'Page data export',             t: D ? parseTime(D.generated_local)?.getTime() ?? null : null, late: 1.25, stale: 3 },
+    { name: 'Air quality (PCD)',            t: D ? latest(D.stations, 'PM25_time') : null,               late: 5,    stale: 8 },
+    { name: 'Weather stations (TMD)',       t: MET ? latest(MET.stations, 'TEMP_time') : null,           late: 3,    stale: 5 },
+    { name: 'Observatory weather (NARIT)',  t: AST ? latest(AST.stations, 'ATEMP_time') : null,          late: 3,    stale: 5 },
+    { name: 'LiDAR PBL height (AstroPark)', t: LID ? latest(LID.stations.filter(s => !s.PBLH_fc), 'PBLH_time') : null, late: 3, stale: 5 },
+    { name: 'Radar rain rate (TMD)',        t: radNewest,                                                late: 0.75, stale: 2 },
+    { name: 'Fire hotspots (FIRMS)',        t: firmsNewest,                                              late: 12,   stale: 24,
+      note: 'no recent detections can also mean no fires' },
+    { name: 'Forecast run (WRF-Chem)',      t: FC ? parseTime(FC.init_local)?.getTime() ?? null : null,  late: 60,   stale: 84 }
+  ].map(f => {
+    const ageH = f.t === null ? null : (nowLocalMs() - f.t) / 3600e3;
+    f.level = ageH === null ? 'none' : ageH > f.stale ? 'stale' : ageH > f.late ? 'late' : 'ok';
+    f.ageH = ageH;
+    return f;
+  });
+}
+function fmtAge(h) {
+  if (h === null) return 'no data';
+  if (h < 1) return `${Math.max(0, Math.round(h * 60))} min ago`;
+  if (h < 48) return `${Math.round(h)} h ago`;
+  return `${(h / 24).toFixed(1)} days ago`;
+}
+function renderStatus() {
+  const fs = feedStatus();
+  $('#statusTable').innerHTML = fs.map(f =>
+    `<tr><td><span class="sdot ${f.level}"></span>${esc(f.name)}${f.note && f.level !== 'ok' ? `<br><span class="muted small">${esc(f.note)}</span>` : ''}</td>` +
+    `<td class="age">${fmtAge(f.ageH)}</td></tr>`).join('');
+  const bad = fs.filter(f => f.level === 'stale' || f.level === 'none').length, late = fs.filter(f => f.level === 'late').length;
+  const b = $('#statusBadge');
+  b.hidden = false;
+  b.innerHTML = bad ? `<span class="sdot stale"></span>${bad} data source${bad === 1 ? '' : 's'} not updating`
+    : late ? `<span class="sdot late"></span>${late} data source${late === 1 ? '' : 's'} delayed`
+    : `<span class="sdot ok"></span>All data up to date`;
+}
+
+function renderAll() {
+  if (state.ovSat) state.satTimes = satTimes();       // keep the satellite loop current
+  applyChartValues(state.poll);
+  renderAqiToggle();
+  renderLayerList();
+  renderSatellite();
+  renderStatus();
+  renderShowFcLabel();
+  $('#updated').textContent = `Data exported ${D.generated_local} (Bangkok time). Refreshes every ${REFRESH_MIN} minutes.` +
+    (FC ? ` Forecast: WRF-Chem run of ${fmtTime(parseTime(FC.init_local))}.` : '');
+  renderForecastControls();
+  renderForecastMap();
+  renderStations();
+  renderFire();
+  renderSummary();
+  renderLegend();
+  renderList();
+  renderOutlook();
+  renderChart();
+}
+
+// Station with the highest latest value of the selected pollutant in the selected area
+// Default station for the chart: nearest to the user (once their location is known),
+// otherwise the highest value in the area. A station the user picked stays selected
+// until they change the variable or the area.
+function selectTopStation() {
+  const p = state.poll;
+  applyChartValues(p);
+  if (state.me) {
+    const near = curStations().filter(s => shownStation(s, p) && stationDist(s) !== null)
+      .sort((x, y) => stationDist(x) - stationDist(y))[0];
+    if (near) { state.sel = near.id; return; }
+  }
+  const top = areaStations().filter(s => shownStation(s, p)).sort((x, y) => y[p] - x[p])[0];
+  state.sel = top ? top.id : null;
+}
+
+function select(id, pan) {
+  state.sel = id;
+  renderStations();
+  renderList();
+  renderChart();
+  const s = curStations().find(x => x.id === id);
+  if (pan && s && isNum(s.lat)) map.panTo([s.lat, s.lon], { animate: !reducedMotion });
+  $('#detail').scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'nearest' });
+}
+
+// ---------- data ----------
+// ---------- quality control of observed hourly series ----------
+// Applied when the data loads, so charts and markers (which follow the charts) both use
+// the cleaned values. Per variable: physical range [min, max] (values a little above max
+// are clipped for humidity), spike check (Hampel: more than 5x the robust spread of the
+// surrounding +/-3 h AND more than `spike` from their median), stuck-sensor check
+// (`flat`: the same value repeated for 6 h or more).
+const QC = {
+  PM25: { min: 0, max: 1000, spike: 30, flat: true },  PM10: { min: 0, max: 2000, spike: 50, flat: true },
+  O3:   { min: 0, max: 500, spike: 40 },               CO:   { min: 0, max: 50, spike: 2 },
+  NO2:  { min: 0, max: 500, spike: 40 },               SO2:  { min: 0, max: 500, spike: 20 },
+  TEMP: { min: -10, max: 50, spike: 6, flat: true },   RH:   { min: 0, max: 100, spike: 30, flat: true, clip: 105 },
+  WIND: { min: 0, max: 60, spike: 8 },                 WDIR: { min: 0, max: 360 },
+  RAIN: { min: 0, max: 200 },
+  ATEMP: { min: -10, max: 45, spike: 6, flat: true },  ARH:  { min: 0, max: 100, spike: 30, flat: true, clip: 105 },
+  AWIND: { min: 0, max: 60, spike: 8 },                AWDIR: { min: 0, max: 360 },
+  ADPS: { min: 0, max: 40, spike: 8 },                 APRES: { min: 500, max: 1100, spike: 8, flat: true },
+  ARAIN: { min: 0, max: 200 },                         ASOLAR: { min: 0, max: 1500 },
+  ASEEING: { min: 0.1, max: 10 },
+  PBLH: { min: 0, max: 5000, spike: 1000 },            ALT:  { min: 0, max: 8000, spike: 1500 }
+};
+function qcArray(a, q) {
+  const v = a.map(x => isNum(x) ? x : null);
+  let n = 0;
+  for (let i = 0; i < v.length; i++) {                       // physical range
+    if (v[i] === null) continue;
+    if (q.clip && v[i] > q.max && v[i] <= q.clip) v[i] = q.max;
+    if (v[i] < q.min || v[i] > q.max) { v[i] = null; n++; }
+  }
+  if (q.spike) {                                             // isolated spikes (Hampel filter)
+    const med = w => { const s = w.slice().sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+    const out = v.slice();
+    for (let i = 0; i < v.length; i++) {
+      if (v[i] === null) continue;
+      const w = [];
+      for (let j = Math.max(0, i - 3); j <= Math.min(v.length - 1, i + 3); j++) if (j !== i && v[j] !== null) w.push(v[j]);
+      if (w.length < 4) continue;
+      const m = med(w), mad = med(w.map(x => Math.abs(x - m)));
+      if (Math.abs(v[i] - m) > Math.max(5 * 1.4826 * mad, q.spike)) { out[i] = null; n++; }
+    }
+    for (let i = 0; i < v.length; i++) v[i] = out[i];
+  }
+  if (q.flat) {                                              // stuck sensor: same value >= 6 h
+    let i = 0;
+    while (i < v.length) {
+      if (v[i] === null) { i++; continue; }
+      let j = i;
+      while (j + 1 < v.length && v[j + 1] !== null && v[j + 1] === v[i]) j++;
+      if (j - i + 1 >= 6) { for (let k = i; k <= j; k++) v[k] = null; n += j - i + 1; }
+      i = j + 1;
+    }
+  }
+  return { v, n };
+}
+function cleanSeries(byId, vars) {
+  for (const q of Object.values(byId)) {
+    q.__qc = q.__qc || {};
+    for (const p of vars) {
+      if (!QC[p] || !Array.isArray(q[p])) continue;
+      const r = qcArray(q[p], QC[p]);
+      q[p] = r.v;
+      q.__qc[p] = r.n;
+    }
+  }
+}
+
+// The chart is the reference: every marker shows the newest value of the same hourly
+// series its chart draws (and its time), or no value if that series is empty.
+function localStr(ms) {
+  const d = new Date(ms);
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:00:00`;
+}
+function syncLatest(obj, byId, vars) {
+  if (!obj || !obj.history_t0_local) return;
+  const t0 = parseTime(obj.history_t0_local).getTime(), now = nowLocalMs();
+  for (const s of arr(obj.stations)) {
+    const q = byId[s.id] || {};
+    for (const p of vars) {
+      const a = arr(q[p]);
+      let i = a.length - 1;
+      while (i >= 0 && !isNum(a[i])) i--;
+      const dir = /DIR$/.test(p);
+      if (i < 0) {                        // nothing in the chart -> nothing on the marker
+        s[p] = null;
+        if (!dir) s[p + '_time'] = '';
+        continue;
+      }
+      s[p] = a[i];
+      if (!dir) s[p + '_time'] = localStr(t0 + i * 3600e3);
+    }
+  }
+}
+
+// Ask for the visitor's location as soon as the page opens (the browser shows its
+// own permission prompt; nothing is requested again if they have blocked it).
+function autoLocate() {
+  if (!navigator.geolocation) return;
+  const go = () => { if (!state.me) requestLocation(); };
+  if (navigator.permissions && navigator.permissions.query) {
+    navigator.permissions.query({ name: 'geolocation' }).then(r => {
+      if (r.state === 'denied') {
+        $('#locNote').textContent = 'Location is blocked for this site. Allow it in the browser\'s site settings to see distances to stations.';
+      } else {
+        go();
+      }
+    }).catch(go);
+  } else {
+    go();
+  }
+}
+
+async function load() {
+  try {
+    const r = await fetch(`${DATA_URL}?t=${Date.now()}`, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    D = await r.json();
+    D.stations = arr(D.stations);
+    D.pollutants = arr(D.pollutants).filter(p => POLL[p]);
+    seriesById = {};
+    for (const s of arr(D.series)) seriesById[s.id] = s;
+    cleanSeries(seriesById, D.pollutants);
+    syncLatest(D, seriesById, D.pollutants);
+
+    // Forecast files are optional: the dashboard works without them
+    const fcs = await fetch(`${FC_URL}?t=${Date.now()}`, { cache: 'no-store' })
+      .then(x => x.ok ? x.json() : null).catch(() => null);
+    FC = fcs;
+    const cor = await fetch(`${COR_URL}?t=${Date.now()}`, { cache: 'no-store' })
+      .then(x => x.ok ? x.json() : null).catch(() => null);
+    if (!cor || !COR || cor.generated_local !== COR.generated_local) corFieldCache = {};
+    COR = cor;
+    corById = {};
+    if (COR) for (const c of arr(COR.stations)) corById[c.id] = c;
+    await loadGrid(state.poll, true);
+    fcById = {};
+    if (FC) for (const s of arr(FC.stations)) fcById[s.id] = s;
+
+    // Weather: TMD observations and the WRF-Chem weather forecast (both optional)
+    const [met, fm] = await Promise.all([MET_URL, FM_URL].map(u =>
+      fetch(`${u}?t=${Date.now()}`, { cache: 'no-store' }).then(x => x.ok ? x.json() : null).catch(() => null)));
+    MET = met; FM = fm;
+    if (MET) MET.stations = arr(MET.stations);
+    metSeriesById = {};
+    if (MET) for (const q of arr(MET.series)) metSeriesById[q.id] = q;
+    if (MET) cleanSeries(metSeriesById, [...MET_VARS, 'WDIR']);
+    if (MET) syncLatest(MET, metSeriesById, [...MET_VARS, 'WDIR']);
+    FMById = {};
+    if (FM) for (const q of arr(FM.stations)) FMById[q.id] = q;
+
+    // Astronomy: NARIT observatories and the forecast at each site (both optional)
+    const [ast, fa] = await Promise.all([AST_URL, FA_URL].map(u =>
+      fetch(`${u}?t=${Date.now()}`, { cache: 'no-store' }).then(x => x.ok ? x.json() : null).catch(() => null)));
+    AST = ast; FA = fa;
+    astSeriesById = {}; FAById = {};
+    if (AST) { AST.stations = arr(AST.stations); for (const q of arr(AST.series)) astSeriesById[q.id] = q; }
+    if (AST) cleanSeries(astSeriesById, ['ATEMP', 'ARH', 'AWIND', 'AWDIR', 'ADPS', 'APRES', 'ARAIN', 'ASOLAR', 'ASEEING']);
+    if (AST) syncLatest(AST, astSeriesById, ['ATEMP', 'ARH', 'AWIND', 'AWDIR', 'ADPS', 'APRES', 'ARAIN', 'ASOLAR', 'ASEEING']);
+    if (FA) for (const q of arr(FA.stations)) FAById[q.id] = q;
+    if (AST && FA) {
+      // Forecast-only variables: show the forecast for the current hour on the markers
+      const fT0 = parseTime(FA.t0_local).getTime();
+      const iNow = Math.round((nowLocalMs() - fT0) / 3600e3);
+      const tStr = (() => { const d = new Date(fT0 + iNow * 3600e3);
+        return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:00:00`; })();
+      for (const s of AST.stations) {
+        const f = FAById[s.id];
+        for (const p of ASTRO_VARS.filter(v => POLL[v].fcOnly || POLL[v].fcFill)) {
+          if (POLL[p].fcFill && isNum(s[p])) continue;          // keep a real observation
+          const v = f ? corMean(f, p)[iNow] : null;
+          s[p] = isNum(v) ? v : null;
+          s[p + '_time'] = tStr;
+          s[p + '_fc'] = true;
+        }
+      }
+    }
+
+    // PBL height: LiDAR sites and the forecast there (both optional)
+    const [lid, fl] = await Promise.all([LID_URL, FL_URL].map(u =>
+      fetch(`${u}?t=${Date.now()}`, { cache: 'no-store' }).then(x => x.ok ? x.json() : null).catch(() => null)));
+    LID = lid; FL = fl;
+    lidSeriesById = {}; FLById = {};
+    if (LID) { LID.stations = arr(LID.stations); for (const q of arr(LID.series)) lidSeriesById[q.id] = q; }
+    if (LID) cleanSeries(lidSeriesById, ['PBLH', 'ALT']);
+    if (LID) syncLatest(LID, lidSeriesById, ['PBLH', 'ALT']);
+    if (FL) for (const q of arr(FL.stations)) FLById[q.id] = q;
+    if (LID && FL) {
+      // No recent LiDAR value (older than 3 h): show the forecast for the current hour instead
+      const fT0 = parseTime(FL.t0_local).getTime();
+      const iNow = Math.round((nowLocalMs() - fT0) / 3600e3);
+      for (const s of LID.stations) {
+        const t = parseTime(s.PBLH_time);
+        if (isNum(s.PBLH) && t && nowLocalMs() - t.getTime() < 3 * 3600e3) continue;
+        const f = FLById[s.id];
+        const v = f ? corMean(f, 'PBLH')[iNow] : null;
+        s.PBLH = isNum(v) ? v : null;
+        const d = new Date(fT0 + iNow * 3600e3);
+        s.PBLH_time = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:00:00`;
+        s.PBLH_fc = true;
+      }
+    }
+    const pblOn = !!(LID || FL);
+
+    RAD = await fetch(`${RAD_URL}?t=${Date.now()}`, { cache: 'no-store' }).then(x => x.ok ? x.json() : null).catch(() => null);
+
+    // Health categories: observed and forecast, per station
+    const HJ = await fetch(`dashboard_data/health.json?t=${Date.now()}`, { cache: 'no-store' }).then(x => x.ok ? x.json() : null).catch(() => null);
+    HLT = null; hltSeriesById = {}; FH = null; FHById = {};
+    if (HJ && arr(HJ.stations).length) {
+      HLT = { history_t0_local: HJ.obs_t0_local, history_n: HJ.obs_n, generated_local: HJ.generated_local, stations: [] };
+      FH = { t0_local: HJ.fc_t0_local, n: HJ.fc_n, init_local: FC ? FC.init_local : HJ.fc_t0_local, n_members: 1, members_init_local: [] };
+      for (const h of arr(HJ.stations)) {
+        HLT.stations.push({ id: h.id, name: h.name, area: h.area, lat: h.lat, lon: h.lon, kind: h.kind,
+                            pair_name: h.pair_name, pair_km: h.pair_km });
+        const se = { id: h.id }, fc = { id: h.id };
+        for (const v of [...HEALTH_VARS, 'HI']) {
+          if (h['obs_' + v] !== undefined) se[v] = arr(h['obs_' + v]);
+          if (h['fc_' + v] !== undefined) fc[v] = arr(h['fc_' + v]);
+        }
+        hltSeriesById[h.id] = se; FHById[h.id] = fc;
+      }
+    }
+
+    const sel = $('#poll');
+    const wanted = D.pollutants.length + ((MET || FM) ? MET_VARS.length : 0) + (pblOn ? 1 : 0) + ((AST || FA) ? ASTRO_VARS.length : 0);
+    if (sel.options.length !== wanted) {
+      sel.innerHTML = `<optgroup label="Air quality">${D.pollutants.map(p => `<option value="${p}">${POLL[p].label}</option>`).join('')}</optgroup>` +
+        ((MET || FM || pblOn) ? `<optgroup label="Weather">${[...((MET || FM) ? MET_VARS : []), ...(pblOn ? ['PBLH'] : [])]
+          .map(p => `<option value="${p}">${POLL[p].label}</option>`).join('')}</optgroup>` : '') +
+        ((AST || FA) ? `<optgroup label="Astronomy">${ASTRO_VARS.map(p => `<option value="${p}">${POLL[p].label}</option>`).join('')}</optgroup>` : '') +
+        (HLT ? `<optgroup label="Health">${HEALTH_VARS.map(p => `<option value="${p}">${POLL[p].label}</option>`).join('')}</optgroup>` : '');
+      sel.value = state.poll;
+    }
+    if (state.first) {
+      selectTopStation();
+      state.first = false;
+    }
+    renderAll();
+  } catch (e) {
+    $('#updated').textContent = `Last refresh failed (${e.message}).`;
+    if (!D) {
+      $('#summary').innerHTML = `Could not load <code>${DATA_URL}</code> (${esc(e.message)}). ` +
+        'Run exportDashboardData in MATLAB, then open this page through a local web server started in the dashboard folder: ' +
+        '<code>python3 -m http.server 8080</code>, then go to <code>http://localhost:8080</code>.';
+    }
+  }
+}
+
+// ---------- events ----------
+document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => {
+  state.area = b.dataset.area;
+  document.querySelectorAll('.seg button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  map.fitBounds(AREAS[state.area].bounds, { animate: !reducedMotion });
+  if (D) {
+    state.userPicked = false;
+    selectTopStation();
+    renderStations();
+    renderSummary();
+    renderList();
+    renderChart();
+  }
+}));
+// Forecast grid for one pollutant; browser revalidates, so unchanged files cost a 304 only
+async function loadGrid(p, refresh) {
+  if (refresh || !(p in FGs)) {
+    const g = await fetch(gridUrl(p), { cache: 'no-cache' }).then(x => x.ok ? x.json() : null).catch(() => null);
+    const prev = FGs[p];
+    if (g && prev && g.init_local !== prev.init_local) fcFrameCache = {};
+    if (g && (!prev || g.init_local !== prev.init_local) && p === state.poll && FG && g.init_local !== FG.init_local) state.frame = null;
+    FGs[p] = g;
+    // WACCM fill for the same variable (only some variables have one)
+    const wk = GRID_ALIAS[p] || p;
+    if (WACCM_VARS.includes(wk)) {
+      const w = await fetch(`dashboard_data/forecast_waccm_${wk}.json`, { cache: 'no-cache' }).then(x => x.ok ? x.json() : null).catch(() => null);
+      if (w && (!WGs[p] || w.init_local !== WGs[p].init_local)) waccmCache = {};
+      WGs[p] = w;
+    } else {
+      WGs[p] = null;
+    }
+  }
+  if (p === state.poll) { FG = FGs[p]; WG = WGs[p] || null; }
+}
+$('#poll').addEventListener('change', async e => {
+  state.poll = e.target.value;
+  if (!D) return;
+  await loadGrid(state.poll, false);
+  state.userPicked = false;
+  selectTopStation();
+  renderAll();
+});
+$('#showFire').addEventListener('change', e => { state.fire = e.target.checked; if (D) renderFire(); });
+$('#hideObs').addEventListener('change', e => {
+  state.hideObs = e.target.checked;
+  if (D) { renderStations(); renderForecastControls(); }
+});
+$('#locBtn').addEventListener('click', requestLocation);
+$('#sortBy').addEventListener('change', e => { state.sort = e.target.value; if (D) renderList(); });
+$('#useAqi').addEventListener('change', e => {
+  state.aqi = e.target.checked;
+  try { localStorage.setItem(AQI_PREF_KEY, state.aqi ? '1' : '0'); } catch (err) { /* private mode: not remembered */ }
+  if (D) renderAll();
+});
+$('#useCor').addEventListener('change', e => { state.cor = e.target.checked; if (D) renderAll(); });
+$('#useWaccm').addEventListener('change', e => {
+  state.waccm = e.target.checked;
+  renderForecastControls(); renderForecastMap();
+});
+$('#showFc').addEventListener('change', e => {
+  state.fcOn = e.target.checked;
+  renderForecastControls(); renderForecastMap(); renderSatellite();
+});
+$('#fcSlider').addEventListener('input', e => {
+  stopPlay();
+  state.tIdx = +e.target.value;
+  renderForecastControls(); renderForecastMap(); renderSatellite();
+});
+$('#playBtn').addEventListener('click', togglePlay);
+$('#statusBadge').addEventListener('click', () => {
+  document.body.classList.remove('panel-hidden');
+  setTimeout(() => { map.invalidateSize(); $('#statusSec').scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth' }); }, 50);
+});
+$('#layerList').addEventListener('click', e => {
+  const b = e.target.closest('.lyr');
+  if (!b) return;
+  if (b.dataset.ov) { toggleOverlay(b.dataset.ov); return; }
+  const sel = $('#poll');
+  sel.value = b.dataset.p;
+  sel.dispatchEvent(new Event('change'));
+});
+$('#layerHead').addEventListener('click', e => {
+  const b = e.currentTarget;
+  b.setAttribute('aria-expanded', String(b.getAttribute('aria-expanded') !== 'true'));
+});
+$('#panelBtn').addEventListener('click', e => {
+  const hidden = document.body.classList.toggle('panel-hidden');
+  const b = e.currentTarget;
+  b.innerHTML = hidden ? '&#x27E8;' : '&#x27E9;';
+  b.title = hidden ? 'Show side panel' : 'Hide side panel';
+  b.setAttribute('aria-label', b.title);
+  b.setAttribute('aria-pressed', String(hidden));
+  setTimeout(() => map.invalidateSize(), 50);
+});
+function bindForecastHover() {
+  map.on('click', pointPopup);
+  map.on('mousemove', e => {
+    // One line for everything shown: forecast value, radar class, satellite note
+    const where = `${e.latlng.lat.toFixed(2)}°N, ${e.latlng.lng.toFixed(2)}°E`;
+    const extra = [];
+    if (state.ovRadar) {
+      const rr = radarClassAt(e.latlng.lat, e.latlng.lng);
+      if (rr) extra.push(`${radarFrames()[state.radIdx].nowcast ? 'radar nowcast' : 'radar'} ${rr.text}`);
+    }
+    if (state.ovSat && state.satIdx >= 0) extra.push(`${SAT[state.ovSat].label.toLowerCase()} (image only, no values)`);
+    if (!state.fcOn || !FG || state.frame === null) {
+      $('#fcCursor').textContent = extra.length ? `At ${where}: ${extra.join('; ')}` : '';
+      return;
+    }
+    const r = fcValueAt(e.latlng.lat, e.latlng.lng);
+    if (r === null) {
+      const wv = waccmValueAt(e.latlng.lat, e.latlng.lng);
+      if (wv !== null) extra.unshift(`WACCM forecast ${fcFmt(wv)} ${state.poll === 'RAIN' ? 'mm in 3 h' : POLL[state.poll].unit}`);
+    }
+    const u = state.poll === 'RAIN' ? 'mm in 3 h' : POLL[state.poll].unit;
+    const fcTxt = r === null ? '' : `forecast ${fcFmt(r.v)} ${u}` + (Math.abs(r.v - r.raw) > 1e-6 ? ` (raw model ${fcFmt(r.raw)} ${u})` : '');
+    const all = [fcTxt, ...extra].filter(Boolean);
+    $('#fcCursor').textContent = all.length ? `At ${where}: ${all.join('; ')}` : '';
+  });
+  map.on('mouseout', () => { $('#fcCursor').textContent = ''; });
+}
+$('#stationList').addEventListener('click', e => {
+  const b = e.target.closest('.stnrow');
+  if (b) { state.userPicked = true; select(b.dataset.id, true); }
+});
+
+initMap();
+bindForecastHover();
+if (window.matchMedia('(max-width: 860px)').matches) $('#layerHead').setAttribute('aria-expanded', 'false');
+load();
+autoLocate();
+setInterval(load, REFRESH_MIN * 60e3);
+function resetChartZoom() {
+  state.zoom = null;
+  $('#zoomReset').hidden = true;
+  if (D && state.sel) renderChart();     // redraw from the first data to the end of the forecast
+}
+$('#zoomReset').addEventListener('click', resetChartZoom);
+$('#chart').addEventListener('dblclick', resetChartZoom);
+</script>
+</body>
+</html>
